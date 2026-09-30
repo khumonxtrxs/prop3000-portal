@@ -1,0 +1,371 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Prop3000 design system — industrial construction brand.
+ * Navy structure, safety-orange energy, brick-red for the Investments side.
+ */
+
+@theme inline {
+  --font-sans: "Barlow", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Barlow Condensed", "Barlow", sans-serif;
+  --font-label: "Barlow Semi Condensed", "Barlow", sans-serif;
+
+  /* Handoff: 3px on buttons, inputs and badges; 4px on cards. Nothing else is rounded. */
+  --radius-sm: 3px;
+  --radius-md: 3px;
+  --radius-lg: var(--radius);
+  --radius-xl: var(--radius);
+  --radius-2xl: var(--radius);
+  --radius-3xl: var(--radius);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-deep: var(--primary-deep);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-brick: var(--brick);
+  --color-brick-foreground: var(--brick-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ring-offset-background: var(--background);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Brand extras from the handoff */
+  --color-whatsapp: var(--whatsapp);
+  --color-whatsapp-foreground: var(--whatsapp-foreground);
+  --color-divider: var(--divider);
+  --color-ink-subtle: var(--ink-subtle);
+  --color-ink-faint: var(--ink-faint);
+  --color-on-navy: var(--on-navy);
+  --color-on-navy-muted: var(--on-navy-muted);
+  --color-on-navy-label: var(--on-navy-label);
+  --color-navy-hairline: var(--navy-hairline);
+
+  /* Status badge pairs: waiting, in motion, good, bad, neutral */
+  --color-status-wait: var(--status-wait);
+  --color-status-wait-foreground: var(--status-wait-foreground);
+  --color-status-motion: var(--status-motion);
+  --color-status-motion-foreground: var(--status-motion-foreground);
+  --color-status-good: var(--status-good);
+  --color-status-good-foreground: var(--status-good-foreground);
+  --color-status-bad: var(--status-bad);
+  --color-status-bad-foreground: var(--status-bad-foreground);
+  --color-status-neutral: var(--status-neutral);
+  --color-status-neutral-foreground: var(--status-neutral-foreground);
+
+  /* Handoff shadows: cards stay flat, only popovers and toasts lift. */
+  --shadow-panel: 0 2px 10px rgb(11 36 80 / 0.06);
+  --shadow-lift: 0 16px 40px rgb(10 37 80 / 0.22);
+  --shadow-toast: 0 14px 34px rgb(10 37 80 / 0.34);
+  --shadow-frame: 0 14px 34px rgb(0 0 0 / 0.34);
+  --shadow-glow: 0 8px 22px rgb(10 37 80 / 0.28);
+
+  --animate-fade-up: fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-fade-in: fade-in 0.5s ease-out both;
+  --animate-scale-in: scale-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-slide-right: slide-right 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-marquee: marquee 32s linear infinite;
+  --animate-pulse-soft: pulse-soft 2.6s ease-in-out infinite;
+  --animate-float: float 6s ease-in-out infinite;
+}
+
+:root {
+  /* Every value below is the oklch equivalent of a hex in the handoff's "Design tokens" table. */
+  --radius: 4px;
+
+  --background: oklch(0.969 0.005 258.3); /* #F3F5F8 page */
+  --foreground: oklch(0.222 0.041 259.3); /* #0F1B2E ink */
+
+  --card: oklch(1 0 0); /* #FFFFFF */
+  --card-foreground: oklch(0.222 0.041 259.3);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.222 0.041 259.3);
+
+  --primary: oklch(0.366 0.115 258.7); /* #123C7A industrial navy */
+  --primary-foreground: oklch(1 0 0);
+  --primary-deep: oklch(0.273 0.086 259.6); /* #0A2550 deep navy */
+
+  --secondary: oklch(0.953 0.014 258.3); /* #EAF0F9 */
+  --secondary-foreground: oklch(0.366 0.115 258.7);
+
+  --muted: oklch(0.957 0.006 255.5); /* #EEF1F5 */
+  --muted-foreground: oklch(0.447 0.034 261.3); /* #4A5568 ink muted */
+
+  --accent: oklch(0.754 0.165 62.8); /* #F7941D safety orange */
+  --accent-foreground: oklch(0.222 0.041 259.3);
+
+  --brick: oklch(0.568 0.213 26); /* #D8232A brick red */
+  --brick-foreground: oklch(1 0 0);
+
+  --destructive: oklch(0.568 0.213 26);
+  --destructive-foreground: oklch(1 0 0);
+
+  --success: oklch(0.617 0.147 153.8); /* #1E9E5A */
+  --success-foreground: oklch(1 0 0);
+
+  --whatsapp: oklch(0.761 0.201 149.7); /* #25D366, WhatsApp buttons only */
+  --whatsapp-foreground: oklch(0.222 0.041 259.3);
+
+  --border: oklch(0.902 0.014 258.3); /* #D9DFE8 */
+  --input: oklch(0.902 0.014 258.3);
+  --divider: oklch(0.942 0.009 258.3); /* #E8ECF2 in-card rules */
+  --ring: oklch(0.754 0.165 62.8);
+
+  --ink-subtle: oklch(0.507 0.034 259.5); /* #5A6679 labels */
+  --ink-faint: oklch(0.656 0.033 258.9); /* #8592A6 timestamps */
+
+  --on-navy: oklch(0.842 0.026 257.9); /* #C6D2E4 body text on navy */
+  --on-navy-muted: oklch(0.746 0.036 257.5); /* #9FB2CD footer body */
+  --on-navy-label: oklch(0.612 0.045 258.5); /* #7C93B8 footer labels */
+  --navy-hairline: oklch(0.335 0.079 257.9); /* #1B3A68 borders on navy */
+
+  --status-wait: oklch(0.96 0.038 81.5); /* #FFF0D6 */
+  --status-wait-foreground: oklch(0.508 0.108 73.3); /* #8A5A00 */
+  --status-motion: oklch(0.953 0.014 258.3); /* #EAF0F9 */
+  --status-motion-foreground: oklch(0.366 0.115 258.7); /* #123C7A */
+  --status-good: oklch(0.949 0.022 160.2); /* #E2F3E9 */
+  --status-good-foreground: oklch(0.467 0.107 154.6); /* #166B3E */
+  --status-bad: oklch(0.936 0.026 14.7); /* #FBE3E4 */
+  --status-bad-foreground: oklch(0.493 0.183 25.7); /* #B21D23 */
+  --status-neutral: oklch(0.957 0.006 255.5); /* #EEF1F5 */
+  --status-neutral-foreground: oklch(0.507 0.034 259.5); /* #5A6679 */
+
+  /* Charts: navy, orange, brick, green, then the grey used for prior months */
+  --chart-1: oklch(0.366 0.115 258.7);
+  --chart-2: oklch(0.754 0.165 62.8);
+  --chart-3: oklch(0.568 0.213 26);
+  --chart-4: oklch(0.617 0.147 153.8);
+  --chart-5: oklch(0.85 0.026 255.6); /* #C3CFDF */
+
+  --sidebar: oklch(0.273 0.086 259.6);
+  --sidebar-foreground: oklch(0.842 0.026 257.9);
+  --sidebar-primary: oklch(0.754 0.165 62.8);
+  --sidebar-primary-foreground: oklch(0.222 0.041 259.3);
+  --sidebar-accent: oklch(0.335 0.079 257.9);
+  --sidebar-accent-foreground: oklch(1 0 0);
+  --sidebar-border: oklch(0.335 0.079 257.9);
+  --sidebar-ring: oklch(0.754 0.165 62.8);
+}
+
+
+.dark {
+  --background: oklch(0.19 0.045 264);
+  --foreground: oklch(0.96 0.008 250);
+  --card: oklch(0.24 0.055 264);
+  --card-foreground: oklch(0.96 0.008 250);
+  --popover: oklch(0.24 0.055 264);
+  --popover-foreground: oklch(0.96 0.008 250);
+  --primary: oklch(0.775 0.155 68);
+  --primary-foreground: oklch(0.22 0.06 60);
+  --primary-deep: oklch(0.22 0.06 265);
+  --secondary: oklch(0.3 0.06 264);
+  --secondary-foreground: oklch(0.96 0.008 250);
+  --muted: oklch(0.29 0.05 264);
+  --muted-foreground: oklch(0.72 0.03 256);
+  --accent: oklch(0.775 0.155 68);
+  --accent-foreground: oklch(0.22 0.06 60);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 16%);
+  --ring: oklch(0.775 0.155 68);
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes slide-right {
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@utility text-display {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.005em;
+  line-height: 0.95;
+  text-transform: uppercase;
+}
+
+/* Tracked small-caps label: "RECEIVED 12 SEP 08:14", table headers, eyebrows. */
+@utility text-label {
+  font-family: var(--font-label);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  line-height: 1.1;
+}
+
+/* The italic "Building your future" tagline. */
+@utility text-tagline {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-style: italic;
+}
+
+/* The prototype's diagonal hatch, used wherever a real photo isn't supplied yet. */
+@utility hatch-fill {
+  background-color: var(--status-neutral);
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--divider) 0 10px,
+    transparent 10px 20px
+  );
+}
+
+@utility surface-blueprint {
+  background-color: var(--primary-deep);
+  background-image:
+    linear-gradient(oklch(1 0 0 / 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(1 0 0 / 0.05) 1px, transparent 1px);
+  background-size: 34px 34px;
+}
+
+@utility gradient-hero {
+  background-image: linear-gradient(
+    115deg,
+    oklch(0.24 0.09 265 / 0.96) 0%,
+    oklch(0.3 0.11 264 / 0.85) 45%,
+    oklch(0.36 0.128 264 / 0.4) 100%
+  );
+}
+
+@utility gradient-accent {
+  background-image: linear-gradient(100deg, var(--accent), oklch(0.83 0.14 82));
+}
+
+@utility hover-lift {
+  transition:
+    transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.25s ease;
+  &:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lift);
+  }
+}
+
+@utility reveal-on-scroll {
+  opacity: 0;
+  transform: translateY(22px);
+  transition:
+    opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  &[data-visible="true"] {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    text-transform: uppercase;
+    line-height: 0.98;
+    letter-spacing: 0.005em;
+  }
+
+  ::selection {
+    background: var(--accent);
+    color: var(--accent-foreground);
+  }
+}

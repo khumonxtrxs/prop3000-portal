@@ -1,0 +1,1603 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+<link href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,400;0,500;0,600;0,700;1,600&family=Barlow+Condensed:wght@500;600;700&family=Barlow+Semi+Condensed:wght@500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="./image-slot.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #F3F5F8; -webkit-font-smoothing: antialiased; }
+  a { color: #123C7A; text-decoration: none; }
+  a:hover { color: #F7941D; text-decoration: underline; }
+  ::placeholder { color: #9AA5B5; }
+  input, select, textarea, button { font-family: Barlow, sans-serif; }
+  @keyframes p3in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+  @keyframes p3pop { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  .leaflet-container { background: #DCE3EC; font-family: Barlow, sans-serif; }
+</style>
+</helmet>
+
+<div style="min-height:100vh;background:#F3F5F8;color:#0F1B2E;font-family:Barlow,'Helvetica Neue',sans-serif">
+
+  <sc-if value="{{ showSwitcher }}" hint-placeholder-val="{{ true }}">
+    <div style="position:sticky;top:0;z-index:900;display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px 16px;background:#0A2550">
+      <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#7C93B8;margin-right:6px">Demo role</span>
+      <sc-for list="{{ roles }}" as="r" hint-placeholder-count="6">
+        <button onClick="{{ r.pick }}" style="padding:7px 12px;border:1px solid {{ r.line }};border-radius:3px;background:{{ r.bg }};color:{{ r.fg }};font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer">{{ r.label }}</button>
+      </sc-for>
+      <span style="flex:1"></span>
+      <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:11px;letter-spacing:.12em;color:#7C93B8">{{ routeCrumb }}</span>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isPublic }}" hint-placeholder-val="{{ true }}">
+  <div>
+    <header style="position:sticky;top:0;z-index:600;background:#FFFFFF;border-bottom:3px solid #123C7A;box-shadow:0 2px 10px rgba(11,36,80,.07)">
+      <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;max-width:1320px;margin:0 auto;padding:10px 20px">
+        <button onClick="{{ goHome }}" style="border:none;background:none;padding:0;cursor:pointer;display:flex;align-items:center">
+          <img src="./assets/prop3000-logo.png" alt="Prop3000" style="height:52px;width:auto;display:block" />
+        </button>
+        <nav style="display:flex;flex-wrap:wrap;align-items:center;gap:2px">
+          <sc-for list="{{ navItems }}" as="n" hint-placeholder-count="7">
+            <button onClick="{{ n.go }}" style="padding:10px 12px;border:none;border-bottom:3px solid {{ n.mark }};background:none;color:{{ n.fg }};font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;cursor:pointer" style-hover="color:#F7941D">{{ n.label }}</button>
+          </sc-for>
+        </nav>
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+          <a href="{{ waLink }}" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:11px 15px;border-radius:3px;background:#25D366;color:#0A2550;font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;text-decoration:none">WhatsApp 081 253 4300</a>
+          <button onClick="{{ goAuth }}" style="padding:11px 15px;border:2px solid #123C7A;border-radius:3px;background:none;color:#123C7A;font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer" style-hover="background:#123C7A;color:#FFFFFF">Sign in</button>
+        </div>
+      </div>
+    </header>
+
+    <sc-if value="{{ r_home }}" hint-placeholder-val="{{ true }}">
+      <main>
+        <section style="position:relative;background:#0A2550;color:#FFFFFF;overflow:hidden">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:40px;align-items:center;max-width:1320px;margin:0 auto;padding:58px 20px 64px">
+            <div style="display:flex;flex-direction:column;gap:20px;min-width:0;animation:p3in .4s ease-out">
+              <span style="align-self:flex-start;padding:7px 12px;background:#D8232A;font-family:'Barlow Semi Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.2em;text-transform:uppercase">Cape Town · Since 2016</span>
+              <h1 style="margin:0;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:clamp(42px,6.6vw,84px);line-height:.94;letter-spacing:-.01em;text-transform:uppercase">We build it, fix it — <span style="color:#F7941D">or buy it for cash.</span></h1>
+              <p style="margin:0;max-width:52ch;font-size:18px;line-height:1.55;color:#C6D2E4">Two divisions, one portal. Request a renovation quote and track the job to completion, or browse distressed property listings and put an offer in front of an agent — no phone calls, no WhatsApp queue.</p>
+              <div style="display:flex;flex-wrap:wrap;gap:10px">
+                <button onClick="{{ goRequest }}" style="padding:16px 24px;border:none;border-radius:3px;background:#F7941D;color:#0A2550;font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer" style-hover="background:#FFAD47">Request a quote</button>
+                <button onClick="{{ goSell }}" style="padding:16px 24px;border:none;border-radius:3px;background:#D8232A;color:#FFFFFF;font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer" style-hover="background:#EF3038">Sell for cash</button>
+                <button onClick="{{ goListings }}" style="padding:16px 24px;border:2px solid #FFFFFF;border-radius:3px;background:none;color:#FFFFFF;font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer" style-hover="background:#FFFFFF;color:#0A2550">Browse listings</button>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:18px;padding-top:6px">
+                <sc-for list="{{ heroBadges }}" as="b" hint-placeholder-count="3">
+                  <span style="display:flex;align-items:center;gap:9px;font-family:'Barlow Semi Condensed',sans-serif;font-size:15px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#E4EBF5">
+                    <span style="display:flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#1E9E5A;color:#FFFFFF;font-size:12px;font-weight:700">✓</span>{{ b.label }}
+                  </span>
+                </sc-for>
+              </div>
+            </div>
+            <div style="position:relative;min-width:0;height:min(58vw,420px);animation:p3in .55s ease-out">
+              <div style="position:absolute;left:0;top:0;width:76%;height:66%;border:7px solid #FFFFFF;box-shadow:0 14px 34px rgba(0,0,0,.34);transform:rotate(-2.4deg)">
+                <image-slot id="p3b-hero1" shape="rect" placeholder="Fixer-upper exterior"></image-slot>
+              </div>
+              <div style="position:absolute;right:0;bottom:8%;width:56%;height:46%;border:7px solid #FFFFFF;box-shadow:0 14px 34px rgba(0,0,0,.34);transform:rotate(3deg)">
+                <image-slot id="p3b-hero2" shape="rect" placeholder="Renovation in progress"></image-slot>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:0">
+          <div style="display:flex;flex-direction:column;gap:16px;padding:44px 24px;background:#FFFFFF;border-bottom:6px solid #123C7A;min-width:0">
+            <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:#123C7A">Prop3000 Developers</span>
+            <h2 style="margin:0;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:40px;line-height:1;text-transform:uppercase">Building your future</h2>
+            <p style="margin:0;font-size:16px;line-height:1.6;color:#4A5568">Renovations, building, plastering, plumbing, electrical, gate motors, paving, painting, waterproofing and cabinet making. Every approved job gets a site supervisor and photo progress updates.</p>
+            <button onClick="{{ goDevelopers }}" style="align-self:flex-start;padding:14px 20px;border:2px solid #123C7A;border-radius:3px;background:none;color:#123C7A;font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer" style-hover="background:#123C7A;color:#FFFFFF">Our services</button>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:16px;padding:44px 24px;background:#123C7A;color:#FFFFFF;border-bottom:6px solid #D8232A;min-width:0">
+            <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:#F7941D">Prop3000 Investments</span>
+            <h2 style="margin:0;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:40px;line-height:1;text-transform:uppercase">We buy properties fast for cash</h2>
+            <p style="margin:0;font-size:16px;line-height:1.6;color:#C6D2E4">Fixer-uppers, distressed properties, vacant plots, incomplete builds and late estate properties. No agent fees, no repairs on your side, no delays and no hassles.</p>
+            <button onClick="{{ goInvestments }}" style="align-self:flex-start;padding:14px 20px;border:none;border-radius:3px;background:#F7941D;color:#0A2550;font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer">Get a cash offer</button>
+          </div>
+        </section>
+
+        <section style="max-width:1320px;margin:0 auto;padding:52px 20px">
+          <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:baseline;justify-content:space-between;margin-bottom:20px">
+            <h2 style="margin:0;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:34px;text-transform:uppercase">Published listings</h2>
+            <button onClick="{{ goListings }}" style="border:none;background:none;padding:0;color:#123C7A;font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;border-bottom:2px solid #F7941D">All {{ listingCount }} on the map →</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,290px),1fr));gap:18px">
+            <sc-for list="{{ featured }}" as="l" hint-placeholder-count="3">
+              <button onClick="{{ l.open }}" style="display:flex;flex-direction:column;padding:0;border:1px solid #D9DFE8;border-radius:4px;background:#FFFFFF;cursor:pointer;text-align:left;overflow:hidden;min-width:0;box-shadow:0 2px 10px rgba(11,36,80,.06)" style-hover="border-color:#F7941D">
+                <span style="display:block;width:100%;aspect-ratio:3/2;background:repeating-linear-gradient(135deg,#DCE3EC 0 10px,#CFD8E4 10px 20px);position:relative">
+                  <span style="position:absolute;left:0;top:12px;padding:6px 10px;background:#D8232A;color:#FFFFFF;font-family:'Barlow Semi Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase">{{ l.pretty }}</span>
+                </span>
+                <span style="display:flex;flex-direction:column;gap:6px;padding:16px">
+                  <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#5A6679">{{ l.suburb }}</span>
+                  <span style="font-family:'Barlow Condensed',sans-serif;font-size:23px;font-weight:600;line-height:1.1;text-transform:uppercase">{{ l.title }}</span>
+                  <span style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-top:2px">
+                    <span style="font-family:'Barlow Condensed',sans-serif;font-size:26px;font-weight:700;color:#123C7A">{{ l.priceLabel }}</span>
+                    <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:13px;color:#5A6679">{{ l.stand }} · {{ l.beds }} bed</span>
+                  </span>
+                </span>
+              </button>
+            </sc-for>
+          </div>
+        </section>
+
+        <section style="background:#D8232A;color:#FFFFFF">
+          <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:center;justify-content:space-between;max-width:1320px;margin:0 auto;padding:34px 20px">
+            <div style="min-width:240px">
+              <h2 style="margin:0 0 4px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:clamp(28px,4vw,44px);line-height:1;text-transform:uppercase">Need a quick cash sale?</h2>
+              <p style="margin:0;font-size:17px;font-weight:600;color:#FFE1E2">No delays. No hassles. Serious cash buyers.</p>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:10px">
+              <button onClick="{{ goSell }}" style="padding:16px 24px;border:none;border-radius:3px;background:#FFFFFF;color:#D8232A;font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer">Submit my property</button>
+              <a href="{{ waLink }}" target="_blank" rel="noopener" style="padding:16px 24px;border-radius:3px;background:#25D366;color:#0A2550;font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;text-decoration:none">WhatsApp us today</a>
+            </div>
+          </div>
+        </section>
+      </main>
+    </sc-if>
+
+    <sc-if value="{{ r_developers }}" hint-placeholder-val="{{ false }}">
+      <main style="animation:p3in .3s ease-out">
+        <div style="background:#0A2550;color:#FFFFFF;padding:44px 20px">
+          <div style="max-width:1320px;margin:0 auto">
+            <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:#F7941D">Prop3000 Developers</span>
+            <h1 style="margin:10px 0 8px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:clamp(36px,5.4vw,66px);line-height:.98;text-transform:uppercase">Our services</h1>
+            <p style="margin:0;font-family:Barlow,sans-serif;font-style:italic;font-weight:600;font-size:22px;color:#F7941D">Building your future</p>
+          </div>
+        </div>
+        <div style="max-width:1320px;margin:0 auto;padding:40px 20px 64px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1.1fr));gap:34px;align-items:start">
+          <div style="min-width:0">
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,200px),1fr));gap:12px">
+              <sc-for list="{{ services }}" as="s" hint-placeholder-count="13">
+                <div style="display:flex;align-items:center;gap:10px;padding:14px 16px;background:#FFFFFF;border:1px solid #D9DFE8;border-left:4px solid #F7941D;border-radius:3px;min-width:0">
+                  <span style="font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:600;text-transform:uppercase">{{ s.name }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:28px;padding:24px;background:#123C7A;color:#FFFFFF;border-radius:4px">
+              <span style="flex:1;min-width:220px;font-family:'Barlow Condensed',sans-serif;font-size:26px;font-weight:700;text-transform:uppercase">Not on the list? Send it anyway.</span>
+              <button onClick="{{ goRequest }}" style="padding:15px 22px;border:none;border-radius:3px;background:#F7941D;color:#0A2550;font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer">Request a quote</button>
+            </div>
+          </div>
+          <div style="position:relative;min-width:0;height:min(80vw,470px)">
+            <div style="position:absolute;right:0;top:0;width:72%;height:48%;border:7px solid #FFFFFF;box-shadow:0 12px 28px rgba(11,36,80,.22);transform:rotate(2deg)">
+              <image-slot id="p3b-dev1" shape="rect" placeholder="Artisan at work"></image-slot>
+            </div>
+            <div style="position:absolute;left:0;top:34%;width:62%;height:40%;border:7px solid #FFFFFF;box-shadow:0 12px 28px rgba(11,36,80,.22);transform:rotate(-3deg)">
+              <image-slot id="p3b-dev2" shape="rect" placeholder="Electrical work"></image-slot>
+            </div>
+            <div style="position:absolute;right:4%;bottom:0;width:60%;height:38%;border:7px solid #FFFFFF;box-shadow:0 12px 28px rgba(11,36,80,.22);transform:rotate(1.5deg)">
+              <image-slot id="p3b-dev3" shape="rect" placeholder="Paving / gate install"></image-slot>
+            </div>
+          </div>
+        </div>
+      </main>
+    </sc-if>
+
+    <sc-if value="{{ r_investments }}" hint-placeholder-val="{{ false }}">
+      <main style="animation:p3in .3s ease-out">
+        <div style="background:#D8232A;color:#FFFFFF;padding:30px 20px">
+          <div style="max-width:1320px;margin:0 auto">
+            <h1 style="margin:0;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:clamp(34px,5.6vw,68px);line-height:1;text-transform:uppercase">Need a <span style="color:#FFD24A">quick cash sale?</span></h1>
+          </div>
+        </div>
+        <div style="background:#123C7A;color:#FFFFFF;padding:26px 20px">
+          <div style="max-width:1320px;margin:0 auto">
+            <h2 style="margin:0 0 6px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:clamp(26px,4.2vw,50px);line-height:1;text-transform:uppercase">We buy properties <span style="color:#FFD24A">fast</span> for <span style="color:#FFFFFF">cash!</span></h2>
+            <p style="margin:0;font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:600">No delays. No hassles.</p>
+          </div>
+        </div>
+        <div style="max-width:1320px;margin:0 auto;padding:44px 20px 64px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:34px;align-items:start">
+          <div style="min-width:0">
+            <h3 style="margin:0 0 16px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:30px;color:#123C7A;text-transform:uppercase">We specialise in:</h3>
+            <div style="display:flex;flex-direction:column;gap:2px;margin-bottom:26px">
+              <sc-for list="{{ buyTypes }}" as="b" hint-placeholder-count="5">
+                <div style="display:flex;align-items:center;gap:12px;padding:14px 18px;background:#123C7A;color:#FFFFFF">
+                  <span style="font-size:16px;font-weight:700;color:#FFFFFF">✓</span>
+                  <span style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:600;text-transform:uppercase">{{ b.name }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:26px">
+              <sc-for list="{{ heroBadges }}" as="b" hint-placeholder-count="3">
+                <span style="display:flex;align-items:center;gap:12px;padding-bottom:10px;border-bottom:1px solid #D9DFE8;font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:600;text-transform:uppercase">
+                  <span style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:#1E9E5A;color:#FFFFFF;font-size:15px;font-weight:700">✓</span>{{ b.label }}
+                </span>
+              </sc-for>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:10px">
+              <button onClick="{{ goSell }}" style="padding:16px 24px;border:none;border-radius:3px;background:#D8232A;color:#FFFFFF;font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer">Get my cash offer</button>
+              <button onClick="{{ goBook }}" style="padding:16px 24px;border:2px solid #123C7A;border-radius:3px;background:none;color:#123C7A;font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer">Book a viewing</button>
+            </div>
+          </div>
+          <div style="min-width:0;display:flex;flex-direction:column;gap:18px">
+            <div style="position:relative;min-width:0;height:min(70vw,360px)">
+              <div style="position:absolute;right:0;top:0;width:78%;height:56%;border:7px solid #FFFFFF;box-shadow:0 12px 28px rgba(11,36,80,.22);transform:rotate(1.6deg)">
+                <image-slot id="p3b-inv1" shape="rect" placeholder="Distressed house"></image-slot>
+              </div>
+              <div style="position:absolute;left:0;bottom:0;width:60%;height:48%;border:7px solid #FFFFFF;box-shadow:0 12px 28px rgba(11,36,80,.22);transform:rotate(-2.6deg)">
+                <image-slot id="p3b-inv2" shape="rect" placeholder="Vacant plot"></image-slot>
+              </div>
+            </div>
+            <div style="padding:22px;background:#FFFFFF;border:1px solid #D9DFE8;border-top:5px solid #F7941D;border-radius:4px">
+              <h4 style="margin:0 0 14px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:24px;text-transform:uppercase">How a cash sale works</h4>
+              <div style="display:flex;flex-direction:column;gap:14px">
+                <sc-for list="{{ cashSteps }}" as="s" hint-placeholder-count="4">
+                  <div style="display:flex;gap:14px;align-items:flex-start">
+                    <span style="flex-shrink:0;display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:3px;background:#123C7A;color:#FFFFFF;font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700">{{ s.num }}</span>
+                    <span style="display:flex;flex-direction:column;gap:2px;min-width:0">
+                      <span style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:600;text-transform:uppercase">{{ s.name }}</span>
+                      <span style="font-size:15px;line-height:1.5;color:#4A5568">{{ s.desc }}</span>
+                    </span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </sc-if>
+
+    <sc-if value="{{ r_listings }}" hint-placeholder-val="{{ false }}">
+      <main style="animation:p3in .3s ease-out">
+        <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;justify-content:space-between;max-width:1440px;margin:0 auto;padding:30px 20px 18px">
+          <div>
+            <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:#5A6679">Prop3000 Investments</span>
+            <h1 style="margin:8px 0 0;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:clamp(30px,4.4vw,52px);line-height:1;text-transform:uppercase">{{ filteredCount }} properties for sale</h1>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <input value="{{ query }}" onInput="{{ setQuery }}" placeholder="Suburb, address or postal code" style="width:250px;padding:13px 14px;border:1px solid #D9DFE8;border-radius:3px;background:#FFFFFF;font-size:15px;color:#0F1B2E" />
+            <select onChange="{{ setPriceBand }}" style="padding:13px 12px;border:1px solid #D9DFE8;border-radius:3px;background:#FFFFFF;font-size:15px;color:#0F1B2E">
+              <sc-for list="{{ priceBands }}" as="p" hint-placeholder-count="4">
+                <option value="{{ p.value }}">{{ p.label }}</option>
+              </sc-for>
+            </select>
+            <select onChange="{{ setPropType }}" style="padding:13px 12px;border:1px solid #D9DFE8;border-radius:3px;background:#FFFFFF;font-size:15px;color:#0F1B2E">
+              <sc-for list="{{ propTypes }}" as="t" hint-placeholder-count="5">
+                <option value="{{ t.value }}">{{ t.label }}</option>
+              </sc-for>
+            </select>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,430px),1fr));gap:20px;max-width:1440px;margin:0 auto;padding:0 20px 60px;align-items:start">
+          <div style="position:relative;min-width:0;height:min(72vh,640px);border:1px solid #D9DFE8;border-radius:4px;overflow:hidden;background:#DCE3EC">
+            <div ref="{{ mapRef }}" style="position:absolute;inset:0"></div>
+            <div style="position:absolute;left:12px;top:12px;z-index:500;padding:8px 11px;background:#0A2550;color:#FFFFFF;font-family:'Barlow Semi Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;border-radius:3px">Click a pin to open the listing</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+            <sc-for list="{{ visibleListings }}" as="l" hint-placeholder-count="4">
+              <div style="display:grid;grid-template-columns:130px 1fr;border:1px solid {{ l.cardLine }};border-radius:4px;background:#FFFFFF;overflow:hidden;min-width:0;box-shadow:0 2px 8px rgba(11,36,80,.05)">
+                <span style="display:block;background:repeating-linear-gradient(135deg,#DCE3EC 0 10px,#CFD8E4 10px 20px)"></span>
+                <div style="display:flex;flex-direction:column;gap:7px;padding:16px;min-width:0">
+                  <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between">
+                    <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#5A6679">{{ l.suburb }}</span>
+                    <span style="padding:4px 9px;border-radius:3px;background:{{ l.bg }};color:{{ l.fg }};font-family:'Barlow Semi Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase">{{ l.pretty }}</span>
+                  </div>
+                  <span style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:600;line-height:1.1;text-transform:uppercase">{{ l.title }}</span>
+                  <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:14px;color:#5A6679">{{ l.type }} · {{ l.stand }} stand · {{ l.beds }} bed · {{ l.baths }} bath</span>
+                  <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-top:2px">
+                    <span style="font-family:'Barlow Condensed',sans-serif;font-size:27px;font-weight:700;color:#123C7A">{{ l.priceLabel }}</span>
+                    <div style="display:flex;gap:8px">
+                      <button onClick="{{ l.open }}" style="padding:10px 14px;border:2px solid #123C7A;border-radius:3px;background:none;color:#123C7A;font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;cursor:pointer">View</button>
+                      <button onClick="{{ l.offer }}" style="padding:10px 14px;border:none;border-radius:3px;background:#F7941D;color:#0A2550;font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;cursor:pointer">Make an offer</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </main>
+    </sc-if>
+
+    <sc-if value="{{ r_listing }}" hint-placeholder-val="{{ false }}">
+      <main style="max-width:1320px;margin:0 auto;padding:22px 20px 70px;animation:p3in .3s ease-out">
+        <button onClick="{{ goListings }}" style="border:none;background:none;padding:0;margin-bottom:18px;color:#5A6679;font-family:'Barlow Semi Condensed',sans-serif;font-size:14px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;cursor:pointer">← All listings</button>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,390px),1fr));gap:30px;align-items:start">
+          <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+            <div style="position:relative;aspect-ratio:4/3;border:1px solid #D9DFE8">
+              <image-slot id="p3b-listing-main" shape="rect" placeholder="Main property photo"></image-slot>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+              <span style="aspect-ratio:1/1;background:repeating-linear-gradient(135deg,#DCE3EC 0 10px,#CFD8E4 10px 20px);border:1px solid #D9DFE8"></span>
+              <span style="aspect-ratio:1/1;background:repeating-linear-gradient(135deg,#DCE3EC 0 10px,#CFD8E4 10px 20px);border:1px solid #D9DFE8"></span>
+              <span style="aspect-ratio:1/1;background:repeating-linear-gradient(135deg,#DCE3EC 0 10px,#CFD8E4 10px 20px);border:1px solid #D9DFE8"></span>
+            </div>
+            <div style="position:relative;height:300px;border:1px solid #D9DFE8;border-radius:4px;overflow:hidden;background:#DCE3EC">
+              <div ref="{{ detailMapRef }}" style="position:absolute;inset:0"></div>
+            </div>
+            <div style="padding:18px;background:#FFFFFF;border:1px solid #D9DFE8;border-top:4px solid #123C7A;border-radius:4px">
+              <span style="display:block;font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:700;text-transform:uppercase;margin-bottom:4px">Route finder</span>
+              <span style="display:block;font-size:14px;color:#5A6679;margin-bottom:12px">Type any Cape Town address to get the driving distance and time from your side to this property.</span>
+              <div style="display:flex;flex-wrap:wrap;gap:8px">
+                <input value="{{ routeFrom }}" onInput="{{ setRouteFrom }}" placeholder="e.g. Bellville, Cape Town" style="flex:1;min-width:180px;padding:13px;border:1px solid #D9DFE8;border-radius:3px;font-size:15px" />
+                <button onClick="{{ findRoute }}" style="padding:13px 18px;border:none;border-radius:3px;background:#123C7A;color:#FFFFFF;font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;cursor:pointer">Get route</button>
+              </div>
+              <sc-if value="{{ hasRoute }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;flex-wrap:wrap;gap:22px;margin-top:14px;padding-top:14px;border-top:1px solid #D9DFE8">
+                  <span style="display:flex;flex-direction:column"><span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#5A6679">From</span><span style="font-size:16px;font-weight:600">{{ routeLabel }}</span></span>
+                  <span style="display:flex;flex-direction:column"><span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#5A6679">Distance</span><span style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:700;color:#123C7A">{{ routeDistance }}</span></span>
+                  <span style="display:flex;flex-direction:column"><span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#5A6679">Driving time</span><span style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:700;color:#123C7A">{{ routeDuration }}</span></span>
+                </div>
+              </sc-if>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+            <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#5A6679">{{ current.suburb }} · {{ current.type }} · {{ current.pretty }}</span>
+            <h1 style="margin:0;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:clamp(28px,4.2vw,48px);line-height:1;text-transform:uppercase">{{ current.title }}</h1>
+            <span style="font-size:16px;color:#4A5568">{{ current.address }}</span>
+            <div style="display:flex;align-items:baseline;gap:12px">
+              <span style="font-family:'Barlow Condensed',sans-serif;font-size:42px;font-weight:700;color:#D8232A;line-height:1">{{ current.priceLabel }}</span>
+              <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#5A6679">asking</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(105px,1fr));border:1px solid #D9DFE8;background:#FFFFFF">
+              <span style="display:flex;flex-direction:column;gap:3px;padding:14px;border-right:1px solid #D9DFE8"><span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#5A6679">Floor</span><span style="font-family:'Barlow Condensed',sans-serif;font-size:21px;font-weight:600">{{ current.size }}</span></span>
+              <span style="display:flex;flex-direction:column;gap:3px;padding:14px;border-right:1px solid #D9DFE8"><span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#5A6679">Stand</span><span style="font-family:'Barlow Condensed',sans-serif;font-size:21px;font-weight:600">{{ current.stand }}</span></span>
+              <span style="display:flex;flex-direction:column;gap:3px;padding:14px;border-right:1px solid #D9DFE8"><span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#5A6679">Beds</span><span style="font-family:'Barlow Condensed',sans-serif;font-size:21px;font-weight:600">{{ current.beds }}</span></span>
+              <span style="display:flex;flex-direction:column;gap:3px;padding:14px"><span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#5A6679">Baths</span><span style="font-family:'Barlow Condensed',sans-serif;font-size:21px;font-weight:600">{{ current.baths }}</span></span>
+            </div>
+            <div style="padding:16px 18px;background:#FFF4E4;border-left:4px solid #F7941D">
+              <span style="display:block;font-family:'Barlow Semi Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#A35E00;margin-bottom:5px">Condition</span>
+              <span style="font-size:15px;line-height:1.55;color:#3A3226">{{ current.cond }}</span>
+            </div>
+
+            <div style="padding:22px;background:#FFFFFF;border:2px solid #123C7A;border-radius:4px">
+              <sc-if value="{{ offerSent }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;flex-direction:column;gap:12px">
+                  <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#1E9E5A">Offer submitted</span>
+                  <span style="font-family:'Barlow Condensed',sans-serif;font-size:30px;font-weight:700;line-height:1.05;text-transform:uppercase">{{ sentOfferLine }}</span>
+                  <p style="margin:0;font-size:15px;line-height:1.6;color:#4A5568">Reference <strong>{{ sentOfferRef }}</strong>, status <strong>pending</strong>. The listing agent approves, declines or counters it — you get an email and an in-app notification either way. Prop3000 never takes payment or handles transfer on the portal.</p>
+                  <div style="display:flex;flex-wrap:wrap;gap:10px">
+                    <button onClick="{{ goClientOffers }}" style="padding:14px 20px;border:none;border-radius:3px;background:#123C7A;color:#FFFFFF;font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer">Track my offer</button>
+                    <a href="{{ waLink }}" target="_blank" rel="noopener" style="padding:14px 20px;border-radius:3px;background:#25D366;color:#0A2550;font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;text-decoration:none">WhatsApp the agent</a>
+                  </div>
+                </div>
+              </sc-if>
+              <sc-if value="{{ offerFormOpen }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;flex-direction:column;gap:14px">
+                  <span style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:700;text-transform:uppercase">Submit an offer</span>
+                  <label style="display:flex;flex-direction:column;gap:6px;font-family:'Barlow Semi Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#5A6679">Your offer (ZAR)
+                    <input value="{{ offerAmount }}" onInput="{{ setOfferAmount }}" placeholder="850000" style="padding:14px;border:1px solid #D9DFE8;border-radius:3px;font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:700;color:#0F1B2E" />
+                  </label>
+                  <label style="display:flex;flex-direction:column;gap:6px;font-family:'Barlow Semi Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#5A6679">Message to the agent
+                    <textarea value="{{ offerNote }}" onInput="{{ setOfferNote }}" rows="3" placeholder="e.g. cash, no bond required, can transfer in 21 days" style="padding:14px;border:1px solid #D9DFE8;border-radius:3px;font-family:Barlow,sans-serif;font-size:15px;resize:vertical"></textarea>
+                  </label>
+                  <button onClick="{{ submitOffer }}" style="padding:17px;border:none;border-radius:3px;background:#F7941D;color:#0A2550;font-family:'Barlow Condensed',sans-serif;font-size:19px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer">Submit offer</button>
+                </div>
+              </sc-if>
+            </div>
+          </div>
+        </div>
+      </main>
+    </sc-if>
+
+    <sc-if value="{{ r_form }}" hint-placeholder-val="{{ false }}">
+      <main style="max-width:820px;margin:0 auto;padding:40px 20px 80px;animation:p3in .3s ease-out">
+        <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:#5A6679">{{ form.kicker }}</span>
+        <h1 style="margin:10px 0 10px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:clamp(32px,4.8vw,56px);line-height:1;text-transform:uppercase">{{ form.title }}</h1>
+        <p style="margin:0 0 28px;font-size:17px;line-height:1.6;color:#4A5568;max-width:58ch">{{ form.blurb }}</p>
+
+        <sc-if value="{{ formSent }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:14px;padding:30px;background:#FFFFFF;border:2px solid #123C7A;border-radius:4px">
+            <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#1E9E5A">Submitted · status new</span>
+            <span style="font-family:'Barlow Condensed',sans-serif;font-size:34px;font-weight:700;line-height:1;text-transform:uppercase">Reference {{ formRef }}</span>
+            <p style="margin:0;font-size:16px;line-height:1.6;color:#4A5568">{{ form.confirm }}</p>
+            <div style="display:flex;flex-wrap:wrap;gap:10px">
+              <a href="{{ waFormLink }}" target="_blank" rel="noopener" style="padding:15px 22px;border-radius:3px;background:#25D366;color:#0A2550;font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;text-decoration:none">Send it on WhatsApp too</a>
+              <button onClick="{{ goClient }}" style="padding:15px 22px;border:2px solid #123C7A;border-radius:3px;background:none;color:#123C7A;font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer">Track it in my portal</button>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ formOpen }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;flex-direction:column;gap:20px">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:14px">
+              <label style="display:flex;flex-direction:column;gap:6px;font-family:'Barlow Semi Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#5A6679">Full name
+                <input placeholder="Thandi Mokoena" style="padding:14px;border:1px solid #D9DFE8;border-radius:3px;background:#FFFFFF;font-size:16px" />
+              </label>
+              <label style="display:flex;flex-direction:column;gap:6px;font-family:'Barlow Semi Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#5A6679">Mobile
+                <input placeholder="081 000 0000" style="padding:14px;border:1px solid #D9DFE8;border-radius:3px;background:#FFFFFF;font-size:16px" />
+              </label>
+              <label style="display:flex;flex-direction:column;gap:6px;font-family:'Barlow Semi Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#5A6679">Email
+                <input placeholder="you@email.co.za" style="padding:14px;border:1px solid #D9DFE8;border-radius:3px;background:#FFFFFF;font-size:16px" />
+              </label>
+              <label style="display:flex;flex-direction:column;gap:6px;font-family:'Barlow Semi Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#5A6679">{{ form.addrLabel }}
+                <input placeholder="12 Belvedere Road, Claremont" style="padding:14px;border:1px solid #D9DFE8;border-radius:3px;background:#FFFFFF;font-size:16px" />
+              </label>
+            </div>
+
+            <sc-if value="{{ form.isRequest }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;flex-direction:column;gap:16px">
+                <div style="display:flex;flex-direction:column;gap:10px">
+                  <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#5A6679">Service type</span>
+                  <div style="display:flex;flex-wrap:wrap;gap:8px">
+                    <sc-for list="{{ serviceChips }}" as="c" hint-placeholder-count="13">
+                      <button onClick="{{ c.toggle }}" style="padding:11px 15px;border:1px solid {{ c.line }};border-radius:3px;background:{{ c.bg }};color:{{ c.fg }};font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:600;text-transform:uppercase;cursor:pointer">{{ c.name }}</button>
+                    </sc-for>
+                  </div>
+                </div>
+                <label style="display:flex;flex-direction:column;gap:6px;font-family:'Barlow Semi Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#5A6679">Budget range
+                  <select style="padding:14px;border:1px solid #D9DFE8;border-radius:3px;background:#FFFFFF;font-size:16px">
+                    <option>Under R20 000</option>
+                    <option>R20 000 – R50 000</option>
+                    <option>R50 000 – R150 000</option>
+                    <option>R150 000+</option>
+                    <option>Not sure yet</option>
+                  </select>
+                </label>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ form.isSell }}" hint-placeholder-val="{{ false }}">
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:14px">
+                <label style="display:flex;flex-direction:column;gap:6px;font-family:'Barlow Semi Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#5A6679">Property type
+                  <select style="padding:14px;border:1px solid #D9DFE8;border-radius:3px;background:#FFFFFF;font-size:16px">
+                    <option>House</option>
+                    <option>Townhouse / sectional title</option>
+                    <option>Vacant plot or land</option>
+                    <option>Incomplete building project</option>
+                  </select>
+                </label>
+                <label style="display:flex;flex-direction:column;gap:6px;font-family:'Barlow Semi Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#5A6679">Condition
+                  <select style="padding:14px;border:1px solid #D9DFE8;border-radius:3px;background:#FFFFFF;font-size:16px">
+                    <option>Fixer-upper</option>
+                    <option>Distressed / damaged</option>
+                    <option>Incomplete build</option>
+                    <option>Late estate property</option>
+                    <option>Good condition</option>
+                  </select>
+                </label>
+                <label style="display:flex;flex-direction:column;gap:6px;font-family:'Barlow Semi Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#5A6679">Asking price (optional)
+                  <input placeholder="R 750 000" style="padding:14px;border:1px solid #D9DFE8;border-radius:3px;background:#FFFFFF;font-size:16px" />
+                </label>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ form.isBook }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;gap:16px">
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:14px">
+                  <label style="display:flex;flex-direction:column;gap:6px;font-family:'Barlow Semi Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#5A6679">Booking type
+                    <select onChange="{{ setBookingType }}" style="padding:14px;border:1px solid #D9DFE8;border-radius:3px;background:#FFFFFF;font-size:16px">
+                      <sc-for list="{{ bookingTypes }}" as="b" hint-placeholder-count="4">
+                        <option value="{{ b.value }}">{{ b.label }}</option>
+                      </sc-for>
+                    </select>
+                  </label>
+                  <label style="display:flex;flex-direction:column;gap:6px;font-family:'Barlow Semi Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#5A6679">Date
+                    <input type="date" style="padding:14px;border:1px solid #D9DFE8;border-radius:3px;background:#FFFFFF;font-size:16px" />
+                  </label>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:10px">
+                  <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#5A6679">Time slot</span>
+                  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px">
+                    <sc-for list="{{ slots }}" as="s" hint-placeholder-count="9">
+                      <button onClick="{{ s.pick }}" style="padding:13px 8px;border:1px solid {{ s.line }};border-radius:3px;background:{{ s.bg }};color:{{ s.fg }};font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:600;cursor:pointer">{{ s.label }}</button>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+            </sc-if>
+
+            <label style="display:flex;flex-direction:column;gap:6px;font-family:'Barlow Semi Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#5A6679">{{ form.descLabel }}
+              <textarea rows="5" placeholder="{{ form.descHint }}" style="padding:14px;border:1px solid #D9DFE8;border-radius:3px;background:#FFFFFF;font-family:Barlow,sans-serif;font-size:16px;resize:vertical"></textarea>
+            </label>
+
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#5A6679">Photos — compressed on your phone before upload</span>
+              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px">
+                <div style="position:relative;aspect-ratio:1/1;border:1px dashed #B8C2D2;background:#FFFFFF"><image-slot id="p3b-photo-1" shape="rect" placeholder="Photo 1"></image-slot></div>
+                <div style="position:relative;aspect-ratio:1/1;border:1px dashed #B8C2D2;background:#FFFFFF"><image-slot id="p3b-photo-2" shape="rect" placeholder="Photo 2"></image-slot></div>
+                <div style="position:relative;aspect-ratio:1/1;border:1px dashed #B8C2D2;background:#FFFFFF"><image-slot id="p3b-photo-3" shape="rect" placeholder="Photo 3"></image-slot></div>
+              </div>
+            </div>
+
+            <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;padding-top:8px;border-top:1px solid #D9DFE8">
+              <button onClick="{{ submitForm }}" style="padding:18px 28px;border:none;border-radius:3px;background:#D8232A;color:#FFFFFF;font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer">{{ form.cta }}</button>
+              <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:14px;font-weight:600;color:#5A6679">No account needed · No agent fees · No obligation</span>
+            </div>
+          </div>
+        </sc-if>
+      </main>
+    </sc-if>
+
+    <sc-if value="{{ r_contact }}" hint-placeholder-val="{{ false }}">
+      <main style="max-width:1100px;margin:0 auto;padding:44px 20px 80px;animation:p3in .3s ease-out">
+        <h1 style="margin:0 0 30px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:clamp(34px,5vw,58px);line-height:1;text-transform:uppercase">Contact Prop3000</h1>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));border:1px solid #D9DFE8;background:#FFFFFF">
+          <sc-for list="{{ contactRows }}" as="c" hint-placeholder-count="5">
+            <div style="display:flex;flex-direction:column;gap:8px;padding:26px;border-right:1px solid #D9DFE8;border-bottom:1px solid #D9DFE8;min-width:0">
+              <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#5A6679">{{ c.label }}</span>
+              <span style="font-family:'Barlow Condensed',sans-serif;font-size:26px;font-weight:700;word-break:break-word;line-height:1.1">{{ c.value }}</span>
+              <span style="font-size:14px;line-height:1.5;color:#5A6679">{{ c.note }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </main>
+    </sc-if>
+
+    <sc-if value="{{ r_auth }}" hint-placeholder-val="{{ false }}">
+      <main style="max-width:480px;margin:0 auto;padding:48px 20px 90px;animation:p3in .3s ease-out">
+        <h1 style="margin:0 0 6px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:44px;line-height:1;text-transform:uppercase">Sign in</h1>
+        <p style="margin:0 0 22px;font-size:16px;color:#5A6679">Staff and clients use the same door — your role decides where you land.</p>
+        <div style="display:flex;flex-direction:column;gap:14px;padding:26px;background:#FFFFFF;border:1px solid #D9DFE8;border-top:5px solid #123C7A;border-radius:4px">
+          <label style="display:flex;flex-direction:column;gap:6px;font-family:'Barlow Semi Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#5A6679">Email
+            <input placeholder="you@prop3000.demo" style="padding:14px;border:1px solid #D9DFE8;border-radius:3px;font-size:16px" />
+          </label>
+          <label style="display:flex;flex-direction:column;gap:6px;font-family:'Barlow Semi Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#5A6679">Password
+            <input type="password" placeholder="••••••••••" style="padding:14px;border:1px solid #D9DFE8;border-radius:3px;font-size:16px" />
+          </label>
+          <button onClick="{{ goClient }}" style="padding:16px;border:none;border-radius:3px;background:#123C7A;color:#FFFFFF;font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer">Sign in</button>
+          <button onClick="{{ goClient }}" style="display:flex;align-items:center;justify-content:center;gap:10px;padding:14px;border:1px solid #D9DFE8;border-radius:3px;background:#FFFFFF;color:#0F1B2E;font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:600;text-transform:uppercase;cursor:pointer">Continue with Google</button>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+            <span style="flex:1;height:1px;background:#D9DFE8"></span>
+            <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:#5A6679">Demo accounts</span>
+            <span style="flex:1;height:1px;background:#D9DFE8"></span>
+          </div>
+          <div style="display:grid;gap:8px">
+            <sc-for list="{{ demoAccounts }}" as="d" hint-placeholder-count="5">
+              <button onClick="{{ d.pick }}" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border:1px solid #D9DFE8;border-left:4px solid #F7941D;border-radius:3px;background:#F3F5F8;cursor:pointer;text-align:left" style-hover="border-color:#123C7A">
+                <span style="display:flex;flex-direction:column;gap:2px;min-width:0">
+                  <span style="font-family:'Barlow Condensed',sans-serif;font-size:19px;font-weight:700;text-transform:uppercase">{{ d.name }}</span>
+                  <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:13px;color:#5A6679">{{ d.email }}</span>
+                </span>
+                <span style="font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;color:#123C7A;text-transform:uppercase">{{ d.role }} →</span>
+              </button>
+            </sc-for>
+          </div>
+          <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:13px;color:#5A6679">All demo accounts use the password <strong>Prop3000#2026</strong>.</span>
+        </div>
+      </main>
+    </sc-if>
+
+    <footer style="background:#0A2550;color:#FFFFFF;padding:48px 20px 26px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:30px;max-width:1320px;margin:0 auto">
+        <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
+          <span style="font-family:'Barlow Condensed',sans-serif;font-size:32px;font-weight:700;line-height:1;text-transform:uppercase">Prop<span style="color:#F7941D">3000</span></span>
+          <p style="margin:0;font-size:15px;line-height:1.6;color:#9FB2CD;max-width:34ch">Developers &amp; Investments. Renovation, building and fast cash property purchases across the Cape Peninsula.</p>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;min-width:0">
+          <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#7C93B8">Pages</span>
+          <sc-for list="{{ navItems }}" as="n" hint-placeholder-count="7">
+            <button onClick="{{ n.go }}" style="align-self:flex-start;border:none;background:none;padding:0;color:#D5DEEA;font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:600;text-transform:uppercase;cursor:pointer" style-hover="color:#F7941D">{{ n.label }}</button>
+          </sc-for>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;min-width:0">
+          <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#7C93B8">Contact</span>
+          <span style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:700;color:#25D366">081 253 4300</span>
+          <span style="font-size:15px;color:#D5DEEA">Office 021 705 1867</span>
+          <span style="font-size:15px;color:#D5DEEA">info@prop3000.co.za</span>
+          <span style="font-size:14px;color:#9FB2CD;line-height:1.5">Mon–Fri 08:00–17:00 · Sat 08:00–13:00</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;min-width:0">
+          <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#7C93B8">Portal</span>
+          <button onClick="{{ goAuth }}" style="align-self:flex-start;border:none;background:none;padding:0;color:#D5DEEA;font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:600;text-transform:uppercase;cursor:pointer">Sign in</button>
+          <button onClick="{{ goRequest }}" style="align-self:flex-start;border:none;background:none;padding:0;color:#D5DEEA;font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:600;text-transform:uppercase;cursor:pointer">Request a quote</button>
+          <button onClick="{{ goSell }}" style="align-self:flex-start;border:none;background:none;padding:0;color:#D5DEEA;font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:600;text-transform:uppercase;cursor:pointer">Sell for cash</button>
+        </div>
+      </div>
+      <div style="max-width:1320px;margin:30px auto 0;padding-top:16px;border-top:1px solid #1B3A68;display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;font-family:'Barlow Semi Condensed',sans-serif;font-size:13px;color:#7C93B8">
+        <span>© 2026 Prop3000 · Cape Town</span>
+        <span>Portal by Blueprint Developers · INSY7315</span>
+      </div>
+    </footer>
+
+    <sc-if value="{{ showChat }}" hint-placeholder-val="{{ true }}">
+      <a href="{{ waLink }}" target="_blank" rel="noopener" style="position:fixed;right:20px;bottom:20px;z-index:700;display:flex;align-items:center;gap:10px;padding:15px 20px;border-radius:40px;background:#25D366;color:#0A2550;font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;text-decoration:none;box-shadow:0 8px 22px rgba(10,37,80,.28)">WhatsApp us</a>
+    </sc-if>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isApp }}" hint-placeholder-val="{{ false }}">
+  <div style="display:flex;flex-direction:column;min-height:100vh">
+    <header style="background:#0A2550;color:#FFFFFF">
+      <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;max-width:1440px;margin:0 auto;padding:14px 20px">
+        <div style="display:flex;align-items:center;gap:14px;min-width:0">
+          <span style="font-family:'Barlow Condensed',sans-serif;font-size:26px;font-weight:700;text-transform:uppercase;line-height:1">Prop<span style="color:#F7941D">3000</span></span>
+          <span style="padding:5px 10px;border-radius:3px;background:#F7941D;color:#0A2550;font-family:'Barlow Semi Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.16em;text-transform:uppercase">{{ roleLabel }}</span>
+          <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:14px;color:#9FB2CD">{{ userName }} · {{ userEmail }}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button onClick="{{ toggleBell }}" style="display:flex;align-items:center;gap:8px;padding:10px 14px;border:1px solid #1B3A68;border-radius:3px;background:#12306080;color:#FFFFFF;font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:600;text-transform:uppercase;cursor:pointer">
+            Alerts<span style="padding:2px 7px;border-radius:10px;background:#D8232A;color:#FFFFFF;font-family:Barlow,sans-serif;font-size:12px;font-weight:600">{{ notifCount }}</span>
+          </button>
+          <button onClick="{{ exitApp }}" style="padding:10px 14px;border:1px solid #1B3A68;border-radius:3px;background:none;color:#9FB2CD;font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:600;text-transform:uppercase;cursor:pointer">Sign out</button>
+        </div>
+      </div>
+      <div style="max-width:1440px;margin:0 auto;padding:0 20px">
+        <nav style="display:flex;flex-wrap:wrap;gap:2px">
+          <sc-for list="{{ portalLinks }}" as="p" hint-placeholder-count="4">
+            <button onClick="{{ p.go }}" style="padding:12px 16px;border:none;border-bottom:3px solid {{ p.mark }};background:{{ p.bg }};color:{{ p.fg }};font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;cursor:pointer">{{ p.label }}</button>
+          </sc-for>
+        </nav>
+      </div>
+    </header>
+
+    <sc-if value="{{ bellOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="position:fixed;right:20px;top:120px;z-index:750;width:min(380px,calc(100vw - 40px));border:1px solid #123C7A;border-radius:4px;background:#FFFFFF;box-shadow:0 16px 40px rgba(10,37,80,.22);animation:p3pop .16s ease-out">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:#123C7A;color:#FFFFFF">
+          <span style="font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700;text-transform:uppercase">Notifications</span>
+          <button onClick="{{ toggleBell }}" style="border:none;background:none;font-size:18px;color:#FFFFFF;cursor:pointer">×</button>
+        </div>
+        <div style="max-height:350px;overflow:auto">
+          <sc-for list="{{ notifications }}" as="n" hint-placeholder-count="3">
+            <div style="display:flex;gap:12px;padding:14px 16px;border-bottom:1px solid #E8ECF2">
+              <span style="width:7px;height:7px;border-radius:50%;background:{{ n.dot }};margin-top:7px;flex-shrink:0"></span>
+              <span style="display:flex;flex-direction:column;gap:3px;min-width:0">
+                <span style="font-size:15px;font-weight:600;line-height:1.35">{{ n.title }}</span>
+                <span style="font-size:14px;line-height:1.5;color:#4A5568">{{ n.body }}</span>
+                <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:12px;color:#8592A6">{{ n.when }} · {{ n.channel }}</span>
+              </span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <main style="flex:1;max-width:1440px;width:100%;margin:0 auto;padding:22px 20px 60px">
+      <h1 style="margin:0 0 4px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:38px;line-height:1;text-transform:uppercase">{{ appTitle }}</h1>
+      <p style="margin:0 0 22px;font-size:16px;color:#5A6679">{{ appSub }}</p>
+
+      <sc-if value="{{ v_stats }}" hint-placeholder-val="{{ false }}">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:14px;margin-bottom:22px">
+          <sc-for list="{{ stats }}" as="m" hint-placeholder-count="4">
+            <div style="display:flex;flex-direction:column;gap:6px;padding:20px;background:#FFFFFF;border:1px solid #D9DFE8;border-top:4px solid {{ m.mark }};border-radius:4px;min-width:0">
+              <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#5A6679">{{ m.label }}</span>
+              <span style="font-family:'Barlow Condensed',sans-serif;font-size:36px;font-weight:700;line-height:1">{{ m.value }}</span>
+              <span style="font-size:14px;color:#5A6679">{{ m.note }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ v_charts }}" hint-placeholder-val="{{ false }}">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:16px;margin-bottom:22px;align-items:start">
+          <div style="padding:20px;background:#FFFFFF;border:1px solid #D9DFE8;border-radius:4px;min-width:0">
+            <span style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;text-transform:uppercase">Lead trend · 6 months</span>
+            <div style="display:flex;align-items:flex-end;gap:10px;height:190px;margin-top:16px">
+              <sc-for list="{{ leadBars }}" as="b" hint-placeholder-count="6">
+                <span style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:8px;height:100%">
+                  <span style="font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;color:#123C7A">{{ b.value }}</span>
+                  <span style="display:block;width:100%;height:{{ b.h }};background:{{ b.color }};border-radius:2px 2px 0 0"></span>
+                  <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:13px;color:#5A6679">{{ b.label }}</span>
+                </span>
+              </sc-for>
+            </div>
+          </div>
+          <div style="padding:20px;background:#FFFFFF;border:1px solid #D9DFE8;border-radius:4px;min-width:0">
+            <span style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;text-transform:uppercase">Revenue by stage</span>
+            <div style="display:flex;flex-direction:column;gap:13px;margin-top:16px">
+              <sc-for list="{{ stageBars }}" as="p" hint-placeholder-count="4">
+                <div style="display:flex;flex-direction:column;gap:6px">
+                  <div style="display:flex;justify-content:space-between;font-size:15px"><span>{{ p.name }}</span><span style="font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700;color:#123C7A">{{ p.value }}</span></div>
+                  <span style="display:block;height:9px;background:#E8ECF2;border-radius:5px;overflow:hidden"><span style="display:block;height:9px;width:{{ p.w }};background:{{ p.color }}"></span></span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="padding:20px;background:#FFFFFF;border:1px solid #D9DFE8;border-radius:4px;min-width:0">
+            <span style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;text-transform:uppercase">Job status mix</span>
+            <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:center;margin-top:16px">
+              <span style="width:130px;height:130px;border-radius:50%;background:{{ pieGradient }};flex-shrink:0"></span>
+              <div style="display:flex;flex-direction:column;gap:8px;min-width:0">
+                <sc-for list="{{ pieLegend }}" as="s" hint-placeholder-count="4">
+                  <span style="display:flex;align-items:center;gap:9px;font-size:15px">
+                    <span style="width:12px;height:12px;border-radius:2px;background:{{ s.color }};flex-shrink:0"></span>{{ s.label }} · <strong>{{ s.count }}</strong>
+                  </span>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+          <div style="padding:20px;background:#FFFFFF;border:1px solid #D9DFE8;border-radius:4px;min-width:0">
+            <span style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;text-transform:uppercase">Demand by trade</span>
+            <div style="display:flex;flex-direction:column;gap:11px;margin-top:16px">
+              <sc-for list="{{ tradeBars }}" as="t" hint-placeholder-count="5">
+                <div style="display:flex;align-items:center;gap:12px">
+                  <span style="width:110px;flex-shrink:0;font-family:'Barlow Semi Condensed',sans-serif;font-size:14px;font-weight:600;text-transform:uppercase">{{ t.name }}</span>
+                  <span style="flex:1;display:block;height:16px;background:#E8ECF2;border-radius:2px;overflow:hidden"><span style="display:block;height:16px;width:{{ t.w }};background:#F7941D"></span></span>
+                  <span style="width:28px;text-align:right;font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700">{{ t.count }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ v_leads }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:26px">
+          <sc-for list="{{ leads }}" as="l" hint-placeholder-count="4">
+            <div style="display:flex;flex-direction:column;gap:14px;padding:20px;background:#FFFFFF;border:1px solid #D9DFE8;border-left:4px solid {{ l.fg }};border-radius:4px">
+              <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start;justify-content:space-between">
+                <div style="display:flex;flex-direction:column;gap:5px;min-width:0">
+                  <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#5A6679">{{ l.id }} · {{ l.received }}</span>
+                  <span style="font-family:'Barlow Condensed',sans-serif;font-size:25px;font-weight:700;line-height:1.05;text-transform:uppercase">{{ l.client }}</span>
+                  <span style="font-size:15px;color:#4A5568">{{ l.service }} · {{ l.address }}</span>
+                  <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:14px;color:#5A6679">{{ l.phone }} · {{ l.email }} · budget {{ l.budget }}</span>
+                </div>
+                <span style="display:inline-block;padding:6px 11px;border-radius:3px;background:{{ l.bg }};color:{{ l.fg }};font-family:'Barlow Semi Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;white-space:nowrap">{{ l.pretty }}</span>
+              </div>
+              <p style="margin:0;font-size:15px;line-height:1.55;color:#4A5568">{{ l.description }}</p>
+              <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding-top:12px;border-top:1px solid #E8ECF2">
+                <sc-for list="{{ l.triage }}" as="t" hint-placeholder-count="3">
+                  <button onClick="{{ t.set }}" style="padding:10px 14px;border:1px solid {{ t.line }};border-radius:3px;background:{{ t.bg }};color:{{ t.fg }};font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;cursor:pointer">{{ t.label }}</button>
+                </sc-for>
+                <span style="flex:1"></span>
+                <select onChange="{{ l.setSupervisor }}" style="padding:11px 12px;border:1px solid #D9DFE8;border-radius:3px;background:#FFFFFF;font-size:15px">
+                  <sc-for list="{{ supervisors }}" as="s" hint-placeholder-count="3">
+                    <option value="{{ s.value }}">{{ s.label }}</option>
+                  </sc-for>
+                </select>
+                <input value="{{ l.quoteAmount }}" onInput="{{ l.setQuote }}" placeholder="Quote amount" style="width:140px;padding:11px;border:1px solid #D9DFE8;border-radius:3px;font-size:15px" />
+                <button onClick="{{ l.convert }}" style="padding:11px 16px;border:none;border-radius:3px;background:#123C7A;color:#FFFFFF;font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;cursor:pointer">Convert to job</button>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ v_submissions }}" hint-placeholder-val="{{ false }}">
+        <h2 style="margin:0 0 12px;font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:700;text-transform:uppercase">Property submissions</h2>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:14px;margin-bottom:26px">
+          <sc-for list="{{ submissions }}" as="p" hint-placeholder-count="3">
+            <div style="display:flex;flex-direction:column;gap:10px;padding:18px;background:#FFFFFF;border:1px solid #D9DFE8;border-radius:4px;min-width:0">
+              <div style="display:flex;gap:10px;align-items:flex-start;justify-content:space-between">
+                <span style="display:flex;flex-direction:column;gap:3px;min-width:0">
+                  <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#5A6679">{{ p.id }}</span>
+                  <span style="font-family:'Barlow Condensed',sans-serif;font-size:21px;font-weight:700;line-height:1.1;text-transform:uppercase">{{ p.address }}</span>
+                  <span style="font-size:14px;color:#4A5568">{{ p.propertyType }} · {{ p.condition }}</span>
+                </span>
+                <span style="display:inline-block;padding:5px 9px;border-radius:3px;background:{{ p.bg }};color:{{ p.fg }};font-family:'Barlow Semi Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;white-space:nowrap">{{ p.pretty }}</span>
+              </div>
+              <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:14px;color:#5A6679">Asking {{ p.askingLabel }} · {{ p.client }}</span>
+              <div style="display:flex;flex-wrap:wrap;gap:8px;padding-top:10px;border-top:1px solid #E8ECF2">
+                <button onClick="{{ p.makeOffer }}" style="padding:11px 15px;border:none;border-radius:3px;background:#D8232A;color:#FFFFFF;font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;cursor:pointer">Make cash offer</button>
+                <button onClick="{{ p.bookViewing }}" style="padding:11px 15px;border:1px solid #123C7A;border-radius:3px;background:none;color:#123C7A;font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;cursor:pointer">Book viewing</button>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ v_bookings }}" hint-placeholder-val="{{ false }}">
+        <h2 style="margin:0 0 12px;font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:700;text-transform:uppercase">Booking diary</h2>
+        <div style="background:#FFFFFF;border:1px solid #D9DFE8;border-radius:4px;overflow:auto">
+          <div style="display:grid;grid-template-columns:150px 1.2fr 1fr 1fr 130px 210px;padding:12px 16px;background:#123C7A;color:#FFFFFF;font-family:'Barlow Semi Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;min-width:940px">
+            <span>Date · slot</span><span>Type</span><span>Client</span><span>Address</span><span>Status</span><span>Action</span>
+          </div>
+          <sc-for list="{{ bookings }}" as="b" hint-placeholder-count="4">
+            <div style="display:grid;grid-template-columns:150px 1.2fr 1fr 1fr 130px 210px;align-items:center;padding:13px 16px;border-bottom:1px solid #E8ECF2;min-width:940px">
+              <span style="font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:600">{{ b.date }} · {{ b.slot }}</span>
+              <span style="font-size:15px">{{ b.prettyType }}</span>
+              <span style="font-size:15px">{{ b.client }}</span>
+              <span style="font-size:14px;color:#4A5568">{{ b.address }}</span>
+              <span><span style="display:inline-block;padding:5px 9px;border-radius:3px;background:{{ b.bg }};color:{{ b.fg }};font-family:'Barlow Semi Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase">{{ b.pretty }}</span></span>
+              <span style="display:flex;gap:6px">
+                <button onClick="{{ b.confirm }}" style="padding:9px 12px;border:none;border-radius:3px;background:#1E9E5A;color:#FFFFFF;font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;text-transform:uppercase;cursor:pointer">Confirm</button>
+                <button onClick="{{ b.complete }}" style="padding:9px 12px;border:1px solid #123C7A;border-radius:3px;background:none;color:#123C7A;font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;text-transform:uppercase;cursor:pointer">Complete</button>
+                <button onClick="{{ b.assign }}" style="padding:9px 12px;border:1px solid #D9DFE8;border-radius:3px;background:none;color:#5A6679;font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;text-transform:uppercase;cursor:pointer">Assign</button>
+              </span>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ v_jobs }}" hint-placeholder-val="{{ false }}">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr));gap:16px;align-items:start">
+          <sc-for list="{{ jobs }}" as="j" hint-placeholder-count="3">
+            <div style="display:flex;flex-direction:column;gap:14px;padding:20px;background:#FFFFFF;border:1px solid #D9DFE8;border-top:4px solid {{ j.fg }};border-radius:4px;min-width:0">
+              <div style="display:flex;gap:10px;align-items:flex-start;justify-content:space-between">
+                <span style="display:flex;flex-direction:column;gap:4px;min-width:0">
+                  <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#5A6679">{{ j.reference }} · {{ j.client }}</span>
+                  <span style="font-family:'Barlow Condensed',sans-serif;font-size:23px;font-weight:700;line-height:1.05;text-transform:uppercase">{{ j.title }}</span>
+                  <span style="font-size:14px;color:#4A5568">{{ j.address }}</span>
+                </span>
+                <span style="display:inline-block;padding:5px 9px;border-radius:3px;background:{{ j.bg }};color:{{ j.fg }};font-family:'Barlow Semi Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;white-space:nowrap">{{ j.pretty }}</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:baseline">
+                <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#5A6679">Quote</span>
+                <span style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:700;color:#123C7A">{{ j.quoteLabel }}</span>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:7px">
+                <div style="display:flex;justify-content:space-between;font-family:'Barlow Semi Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#5A6679"><span>Progress</span><span>{{ j.progress }}%</span></div>
+                <span style="display:block;height:10px;background:#E8ECF2;border-radius:5px;overflow:hidden"><span style="display:block;height:10px;width:{{ j.progressW }};background:#F7941D"></span></span>
+                <sc-if value="{{ canEditJobs }}" hint-placeholder-val="{{ false }}">
+                  <input type="range" min="0" max="100" step="5" value="{{ j.progress }}" onInput="{{ j.setProgress }}" style="width:100%;accent-color:#F7941D" />
+                </sc-if>
+              </div>
+              <sc-if value="{{ canEditJobs }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;flex-wrap:wrap;gap:7px">
+                  <sc-for list="{{ j.statusButtons }}" as="s" hint-placeholder-count="4">
+                    <button onClick="{{ s.set }}" style="padding:9px 12px;border:1px solid {{ s.line }};border-radius:3px;background:{{ s.bg }};color:{{ s.fg }};font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;cursor:pointer">{{ s.label }}</button>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
+                <sc-for list="{{ j.photos }}" as="p" hint-placeholder-count="3">
+                  <span style="aspect-ratio:1/1;background:repeating-linear-gradient(135deg,#DCE3EC 0 8px,#CFD8E4 8px 16px);border:1px solid #D9DFE8"></span>
+                </sc-for>
+                <sc-if value="{{ canEditJobs }}" hint-placeholder-val="{{ false }}">
+                  <button onClick="{{ j.addPhoto }}" style="aspect-ratio:1/1;border:1px dashed #B8C2D2;border-radius:3px;background:none;color:#5A6679;font-size:22px;cursor:pointer">+</button>
+                </sc-if>
+              </div>
+              <sc-if value="{{ canEditJobs }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;gap:8px">
+                  <input value="{{ j.noteDraft }}" onInput="{{ j.setNote }}" placeholder="Site note for the history…" style="flex:1;min-width:0;padding:11px;border:1px solid #D9DFE8;border-radius:3px;font-size:15px" />
+                  <button onClick="{{ j.addNote }}" style="padding:11px 14px;border:none;border-radius:3px;background:#123C7A;color:#FFFFFF;font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;text-transform:uppercase;cursor:pointer">Log</button>
+                </div>
+              </sc-if>
+              <div style="display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px solid #E8ECF2">
+                <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#5A6679">Status history</span>
+                <sc-for list="{{ j.history }}" as="h" hint-placeholder-count="2">
+                  <span style="display:flex;gap:10px;font-size:14px;color:#4A5568">
+                    <span style="font-family:'Barlow Semi Condensed',sans-serif;font-weight:600;color:#123C7A;white-space:nowrap">{{ h.status }}</span>
+                    <span style="min-width:0">{{ h.note }}</span>
+                    <span style="margin-left:auto;font-family:'Barlow Semi Condensed',sans-serif;color:#8592A6;white-space:nowrap">{{ h.when }}</span>
+                  </span>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ v_quotes }}" hint-placeholder-val="{{ false }}">
+        <h2 style="margin:0 0 12px;font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:700;text-transform:uppercase">My quotes</h2>
+        <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:26px">
+          <sc-for list="{{ quotes }}" as="q" hint-placeholder-count="2">
+            <div style="display:flex;flex-direction:column;gap:12px;padding:20px;background:#FFFFFF;border:1px solid #D9DFE8;border-left:4px solid {{ q.fg }};border-radius:4px">
+              <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start;justify-content:space-between">
+                <span style="display:flex;flex-direction:column;gap:4px;min-width:0">
+                  <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#5A6679">{{ q.reference }} · {{ q.jobRef }}</span>
+                  <span style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:700;line-height:1.05;text-transform:uppercase">{{ q.title }}</span>
+                </span>
+                <span style="display:inline-block;padding:6px 11px;border-radius:3px;background:{{ q.bg }};color:{{ q.fg }};font-family:'Barlow Semi Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.12em;text-transform:uppercase">{{ q.pretty }}</span>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:7px">
+                <sc-for list="{{ q.lineItems }}" as="li" hint-placeholder-count="3">
+                  <span style="display:flex;justify-content:space-between;gap:12px;font-size:15px;color:#4A5568"><span style="min-width:0">{{ li.name }}</span><span style="font-family:'Barlow Semi Condensed',sans-serif;font-weight:600;white-space:nowrap">{{ li.amount }}</span></span>
+                </sc-for>
+                <span style="display:flex;justify-content:space-between;gap:12px;font-size:15px;color:#4A5568;padding-top:8px;border-top:1px solid #E8ECF2"><span>VAT 15%</span><span style="font-family:'Barlow Semi Condensed',sans-serif;font-weight:600">{{ q.vatLabel }}</span></span>
+                <span style="display:flex;justify-content:space-between;gap:12px;align-items:baseline"><span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#5A6679">Total</span><span style="font-family:'Barlow Condensed',sans-serif;font-size:30px;font-weight:700;color:#123C7A">{{ q.totalLabel }}</span></span>
+              </div>
+              <sc-if value="{{ q.actionable }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;flex-wrap:wrap;gap:8px;padding-top:10px;border-top:1px solid #E8ECF2">
+                  <button onClick="{{ q.approve }}" style="padding:13px 20px;border:none;border-radius:3px;background:#1E9E5A;color:#FFFFFF;font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;cursor:pointer">Approve quote</button>
+                  <button onClick="{{ q.decline }}" style="padding:13px 20px;border:1px solid #D8232A;border-radius:3px;background:none;color:#D8232A;font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;cursor:pointer">Decline</button>
+                  <a href="{{ waLink }}" target="_blank" rel="noopener" style="padding:13px 20px;border-radius:3px;background:#25D366;color:#0A2550;font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;text-decoration:none">Query on WhatsApp</a>
+                </div>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ v_myrequests }}" hint-placeholder-val="{{ false }}">
+        <h2 style="margin:0 0 12px;font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:700;text-transform:uppercase">My requests &amp; bookings</h2>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:14px">
+          <sc-for list="{{ myRequests }}" as="r" hint-placeholder-count="3">
+            <div style="display:flex;flex-direction:column;gap:7px;padding:18px;background:#FFFFFF;border:1px solid #D9DFE8;border-radius:4px;min-width:0">
+              <div style="display:flex;gap:10px;justify-content:space-between;align-items:flex-start">
+                <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#5A6679">{{ r.id }} · {{ r.date }}</span>
+                <span style="display:inline-block;padding:5px 9px;border-radius:3px;background:{{ r.bg }};color:{{ r.fg }};font-family:'Barlow Semi Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;white-space:nowrap">{{ r.pretty }}</span>
+              </div>
+              <span style="font-family:'Barlow Condensed',sans-serif;font-size:21px;font-weight:700;line-height:1.1;text-transform:uppercase">{{ r.title }}</span>
+              <span style="font-size:14px;color:#4A5568">{{ r.note }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ v_offers }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <sc-for list="{{ offerQueue }}" as="o" hint-placeholder-count="4">
+            <div style="display:flex;flex-direction:column;gap:14px;padding:20px;background:#FFFFFF;border:1px solid #D9DFE8;border-left:4px solid {{ o.fg }};border-radius:4px">
+              <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start;justify-content:space-between">
+                <div style="display:flex;flex-direction:column;gap:5px;min-width:0">
+                  <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#5A6679">{{ o.id }} · submitted {{ o.submitted }}</span>
+                  <span style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:700;line-height:1.05;text-transform:uppercase">{{ o.listing }}</span>
+                  <span style="font-size:15px;color:#4A5568">{{ o.buyer }} · {{ o.contact }}</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:3px;align-items:flex-end">
+                  <span style="font-family:'Barlow Condensed',sans-serif;font-size:32px;font-weight:700;line-height:1;color:#0F1B2E">{{ o.amountLabel }}</span>
+                  <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:13px;color:#5A6679">asking {{ o.askingLabel }} · {{ o.gap }}</span>
+                </div>
+              </div>
+              <sc-if value="{{ o.hasNote }}" hint-placeholder-val="{{ false }}">
+                <span style="font-size:15px;line-height:1.5;color:#4A5568;padding:11px 13px;background:#F3F5F8;border-radius:3px">“{{ o.note }}”</span>
+              </sc-if>
+              <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding-top:12px;border-top:1px solid #E8ECF2">
+                <span style="display:inline-block;padding:6px 11px;border-radius:3px;background:{{ o.bg }};color:{{ o.fg }};font-family:'Barlow Semi Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.12em;text-transform:uppercase">{{ o.pretty }}</span>
+                <sc-if value="{{ o.agentActions }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;flex-wrap:wrap;gap:8px">
+                    <button onClick="{{ o.approve }}" style="padding:12px 17px;border:none;border-radius:3px;background:#1E9E5A;color:#FFFFFF;font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;cursor:pointer">Approve</button>
+                    <button onClick="{{ o.counter }}" style="padding:12px 17px;border:1px solid #123C7A;border-radius:3px;background:none;color:#123C7A;font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;cursor:pointer">Counter</button>
+                    <button onClick="{{ o.decline }}" style="padding:12px 17px;border:1px solid #D8232A;border-radius:3px;background:none;color:#D8232A;font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;cursor:pointer">Decline</button>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ o.clientCounter }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+                    <span style="font-size:15px;color:#123C7A">Agent countered at <strong>{{ o.counterLabel }}</strong></span>
+                    <button onClick="{{ o.acceptCounter }}" style="padding:12px 17px;border:none;border-radius:3px;background:#1E9E5A;color:#FFFFFF;font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;text-transform:uppercase;cursor:pointer">Accept</button>
+                    <button onClick="{{ o.declineCounter }}" style="padding:12px 17px;border:1px solid #D8232A;border-radius:3px;background:none;color:#D8232A;font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;text-transform:uppercase;cursor:pointer">Decline</button>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ o.settled }}" hint-placeholder-val="{{ false }}">
+                  <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:14px;font-weight:600;color:#5A6679">{{ o.outcome }}</span>
+                </sc-if>
+              </div>
+              <sc-if value="{{ o.countering }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:14px;background:#EAF0F9;border-radius:3px">
+                  <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#123C7A">Counter at (ZAR)</span>
+                  <input value="{{ counterVal }}" onInput="{{ setCounterVal }}" placeholder="875000" style="width:150px;padding:11px;border:1px solid #B9C7DE;border-radius:3px;font-family:'Barlow Condensed',sans-serif;font-size:19px;font-weight:700" />
+                  <button onClick="{{ o.sendCounter }}" style="padding:11px 16px;border:none;border-radius:3px;background:#123C7A;color:#FFFFFF;font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;text-transform:uppercase;cursor:pointer">Send counter</button>
+                  <button onClick="{{ cancelCounter }}" style="padding:11px 16px;border:none;background:none;color:#5A6679;font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:600;text-transform:uppercase;cursor:pointer">Cancel</button>
+                </div>
+              </sc-if>
+              <sc-if value="{{ o.hasEvents }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;flex-direction:column;gap:6px;padding-top:10px;border-top:1px solid #E8ECF2">
+                  <span style="font-family:'Barlow Semi Condensed',sans-serif;font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#5A6679">Offer events</span>
+                  <sc-for list="{{ o.events }}" as="e" hint-placeholder-count="2">
+                    <span style="display:flex;gap:10px;font-size:14px;color:#4A5568">
+                      <span style="font-family:'Barlow Semi Condensed',sans-serif;font-weight:600;color:#123C7A">{{ e.action }}</span>
+                      <span>{{ e.detail }}</span>
+                      <span style="margin-left:auto;font-family:'Barlow Semi Condensed',sans-serif;color:#8592A6">{{ e.when }}</span>
+                    </span>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+    </main>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:950;display:flex;align-items:center;gap:12px;padding:15px 22px;border-radius:4px;background:#0A2550;color:#FFFFFF;box-shadow:0 14px 34px rgba(10,37,80,.34);animation:p3pop .2s ease-out;max-width:calc(100vw - 32px)">
+      <span style="width:8px;height:8px;border-radius:50%;background:#25D366;flex-shrink:0"></span>
+      <span style="font-size:15px;line-height:1.4">{{ toast }}</span>
+    </div>
+  </sc-if>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showRoleSwitcher&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Prototype&quot;},&quot;showChatWidget&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Prototype&quot;}}">
+const WA = 'https://wa.me/27812534300';
+const money = (n) => 'R ' + Math.round(n || 0).toLocaleString('en-ZA').replace(/,/g, ' ');
+const pretty = (s) => String(s || '').split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
+const TONE = {
+  new: ['#FFF0D6', '#8A5A00'], contacted: ['#EAF0F9', '#123C7A'], quoted: ['#EAF0F9', '#123C7A'],
+  approved: ['#E2F3E9', '#166B3E'], converted: ['#E2F3E9', '#166B3E'], declined: ['#FBE3E4', '#B21D23'],
+  reviewing: ['#FFF0D6', '#8A5A00'], viewing_booked: ['#EAF0F9', '#123C7A'], offer_made: ['#FFF0D6', '#8A5A00'],
+  accepted: ['#E2F3E9', '#166B3E'], purchased: ['#E2F3E9', '#166B3E'],
+  in_progress: ['#FFF0D6', '#8A5A00'], on_hold: ['#FBE3E4', '#B21D23'], complete: ['#E2F3E9', '#166B3E'], cancelled: ['#EEF1F5', '#5A6679'],
+  requested: ['#FFF0D6', '#8A5A00'], confirmed: ['#E2F3E9', '#166B3E'], completed: ['#EEF1F5', '#5A6679'],
+  draft: ['#EEF1F5', '#5A6679'], published: ['#E2F3E9', '#166B3E'], under_offer: ['#FFF0D6', '#8A5A00'], sold: ['#EEF1F5', '#5A6679'],
+  pending: ['#FFF0D6', '#8A5A00'], countered: ['#EAF0F9', '#123C7A']
+};
+const tone = (s) => TONE[s] || ['#EEF1F5', '#5A6679'];
+
+const SUBURBS = {
+  'cape town': [-33.9249, 18.4241], 'bellville': [-33.9022, 18.6295], 'claremont': [-33.9853, 18.4649],
+  'parow': [-33.9008, 18.5893], 'goodwood': [-33.9019, 18.5514], 'athlone': [-33.9631, 18.5083],
+  'mitchells plain': [-34.0350, 18.6178], 'brackenfell': [-33.8737, 18.6981], 'kuils river': [-33.9189, 18.6947],
+  'elsies river': [-33.9193, 18.5551], 'muizenberg': [-34.1083, 18.4695], 'somerset west': [-34.0850, 18.8530],
+  'durbanville': [-33.8309, 18.6503], 'milnerton': [-33.8747, 18.4899], 'stellenbosch': [-33.9321, 18.8602]
+};
+
+const LISTINGS = [
+  { id: 'LST-104', suburb: 'Athlone', address: '32 Klipfontein Road, Athlone', title: 'Fire-damaged 3 bed on a corner erf', type: 'House', price: 890000, size: '140 m²', stand: '620 m²', beds: 3, baths: 1, lat: -33.9631, lng: 18.5083, status: 'published', cond: 'Roof and kitchen gutted by fire in 2025. Structure and foundations sound.', },
+  { id: 'LST-118', suburb: 'Brackenfell', address: '8 Oakdene Close, Brackenfell', title: 'Unfinished double storey, slab cast', type: 'Incomplete build', price: 1250000, size: '210 m²', stand: '840 m²', beds: 4, baths: 2, lat: -33.8737, lng: 18.6981, status: 'published', cond: 'Construction stopped at first-floor slab. Approved plans transfer with the sale.' },
+  { id: 'LST-122', suburb: 'Elsies River', address: '14 Halt Road, Elsies River', title: 'Late estate cottage, original 1960s', type: 'House', price: 640000, size: '95 m²', stand: '495 m²', beds: 2, baths: 1, lat: -33.9193, lng: 18.5551, status: 'published', cond: 'Untouched since 1968. Electrics and plumbing need full replacement.' },
+  { id: 'LST-131', suburb: 'Mitchells Plain', address: '77 Eisleben Road, Mitchells Plain', title: 'Flood-damaged family home', type: 'House', price: 720000, size: '160 m²', stand: '710 m²', beds: 3, baths: 2, lat: -34.0350, lng: 18.6178, status: 'under_offer', cond: 'Water damage to floors and lower walls. Roof and frame unaffected.' },
+  { id: 'LST-140', suburb: 'Kuils River', address: 'Erf 4410, Van Riebeeck Road', title: 'Vacant plot with services connected', type: 'Vacant land', price: 385000, size: '—', stand: '1 040 m²', beds: 0, baths: 0, lat: -33.9189, lng: 18.6947, status: 'published', cond: 'Level plot, water and electricity connections in place.' },
+  { id: 'LST-147', suburb: 'Goodwood', address: '5 Tygerberg Close, Goodwood', title: 'Duplex with problem-tenant history', type: 'Townhouse', price: 980000, size: '175 m²', stand: '320 m²', beds: 3, baths: 2, lat: -33.9019, lng: 18.5514, status: 'published', cond: 'Interior damage from previous tenants. Eviction done, unit now vacant.' }
+];
+
+const SERVICES = ['Renovations', 'Building', 'Scheming', 'Plastering', 'Plumbing', 'Electrical', 'Electrical Gates', 'Gate Motors', 'Paving', 'Painting', 'Waterproofing', 'Cabinet Making', 'Built-In Cupboards'];
+
+class Component extends DCLogic {
+  state = {
+    role: 'public', route: 'home', bellOpen: false, toast: null,
+    query: '', priceBand: 'all', propType: 'all',
+    listingId: 'LST-104', offerAmount: '', offerNote: '', offerSent: false, sentRef: '', sentAmount: 0,
+    routeFrom: '', route: 'home', routeInfo: null,
+    formKind: 'request', formSent: false, formRef: '', picked: ['Plumbing'], slot: '09:00', bookingType: 'site_visit',
+    counterFor: null, counterVal: '',
+    leadDrafts: {},
+    offers: [
+      { id: 'OFR-2041', buyer: 'Thandi Client', contact: '081 447 1180', listing: 'LST-104 · Athlone', amount: 820000, asking: 890000, submitted: '02 Sep', status: 'pending', message: 'Subject to bond approval within 30 days.', mine: true, events: [{ action: 'submitted', detail: money(820000), when: '02 Sep 10:12' }] },
+      { id: 'OFR-2044', buyer: 'Renette du Toit', contact: '083 220 6614', listing: 'LST-118 · Brackenfell', amount: 1180000, asking: 1250000, submitted: '03 Sep', status: 'pending', message: 'Cash, no bond required. Can transfer in 21 days.', events: [{ action: 'submitted', detail: money(1180000), when: '03 Sep 08:40' }] },
+      { id: 'OFR-2047', buyer: 'Kagiso Mahlangu', contact: '071 903 5522', listing: 'LST-122 · Elsies River', amount: 590000, asking: 640000, submitted: '05 Sep', status: 'pending', message: '', events: [{ action: 'submitted', detail: money(590000), when: '05 Sep 16:02' }] },
+      { id: 'OFR-2039', buyer: 'Thandi Client', contact: '081 447 1180', listing: 'LST-140 · Kuils River', amount: 370000, asking: 385000, submitted: '29 Aug', status: 'countered', counter: 380000, message: '', mine: true, events: [{ action: 'submitted', detail: money(370000), when: '29 Aug 11:20' }, { action: 'countered', detail: money(380000) + ' by Riaan Agent', when: '30 Aug 09:05' }] },
+      { id: 'OFR-2036', buyer: 'Lerato Sithole', contact: '079 118 7743', listing: 'LST-147 · Goodwood', amount: 830000, asking: 980000, submitted: '27 Aug', status: 'declined', message: 'Well below the reserve.', events: [{ action: 'submitted', detail: money(830000), when: '27 Aug 07:55' }, { action: 'declined', detail: 'below reserve', when: '27 Aug 15:10' }] }
+    ],
+    requests: [
+      { id: 'SRQ-3324', client: 'Thandi Client', phone: '081 114 7761', email: 'client@prop3000.demo', service: 'Renovations, Plastering', address: '12 Belvedere Road, Claremont', budget: 'R50 000 – R150 000', received: '12 Sep 08:14', status: 'new', description: 'Full bathroom renovation plus damp repair on the lounge wall. House is occupied, work must happen during the day.' },
+      { id: 'SRQ-3323', client: 'Deon van Wyk', phone: '083 661 2204', email: 'deonvw@email.co.za', service: 'Gate Motors', address: '40 Frans Conradie Drive, Parow', budget: 'Under R20 000', received: '11 Sep 16:40', status: 'contacted', description: 'Sliding gate motor burnt out. Needs replacement and a new remote set.' },
+      { id: 'SRQ-3321', client: 'Nomsa Khumalo', phone: '079 442 8830', email: 'nomsak@email.co.za', service: 'Plastering, Electrical', address: '9 Voortrekker Road, Goodwood', budget: 'R20 000 – R50 000', received: '10 Sep 11:02', status: 'quoted', description: 'Damp on the lounge wall, plaster crumbling. Also wants three extra plug points.' },
+      { id: 'SRQ-3318', client: 'Michael Dlamini', phone: '072 908 1145', email: 'm.dlamini@email.co.za', service: 'Paving', address: '14 Kruis Street, Bellville', budget: 'R50 000 – R150 000', received: '04 Sep 09:26', status: 'converted', description: 'Driveway paving, roughly 90 square metres, wants interlocking pavers.' }
+    ],
+    submissions: [
+      { id: 'PSB-881', client: 'Anele Mbeki', address: '18 Duine Road, Muizenberg', propertyType: 'House', condition: 'Distressed / damaged', asking: 900000, status: 'new' },
+      { id: 'PSB-877', client: 'F. Adams', address: 'Erf 220, Kuils River', propertyType: 'Vacant plot or land', condition: 'Fixer-upper', asking: 410000, status: 'reviewing' },
+      { id: 'PSB-870', client: 'Estate late J. Petersen', address: '3 Loop Street, Parow', propertyType: 'House', condition: 'Late estate property', asking: 680000, status: 'viewing_booked' }
+    ],
+    bookings: [
+      { id: 'BKG-501', client: 'Thandi Client', type: 'site_visit', date: '17 Sep', slot: '09:00', address: '12 Belvedere Road, Claremont', status: 'requested' },
+      { id: 'BKG-502', client: 'Anele Mbeki', type: 'property_viewing', date: '18 Sep', slot: '11:00', address: '18 Duine Road, Muizenberg', status: 'requested' },
+      { id: 'BKG-498', client: 'Michael Dlamini', type: 'renovation_start', date: '15 Sep', slot: '08:00', address: '14 Kruis Street, Bellville', status: 'confirmed' },
+      { id: 'BKG-491', client: 'Nomsa Khumalo', type: 'consultation', date: '09 Sep', slot: '14:00', address: '9 Voortrekker Road, Goodwood', status: 'completed' }
+    ],
+    jobs: [
+      { reference: 'JOB-4412', client: 'Michael Dlamini', title: 'Driveway paving, 90 m² interlocking', address: '14 Kruis Street, Bellville', status: 'in_progress', progress: 60, quote: 64400, photos: 3, supervisor: 'Sipho Supervisor', noteDraft: '', history: [{ status: 'approved', note: 'Client approved quote Q-1188', when: '05 Sep' }, { status: 'in_progress', note: 'Sub-base compacted, pavers on site', when: '11 Sep' }] },
+      { reference: 'JOB-4408', client: 'Nomsa Khumalo', title: 'Damp repair and three plug points', address: '9 Voortrekker Road, Goodwood', status: 'quoted', progress: 0, quote: 28750, photos: 1, supervisor: 'Sipho Supervisor', noteDraft: '', history: [{ status: 'quoted', note: 'Quote Q-1191 sent to client', when: '10 Sep' }] },
+      { reference: 'JOB-4399', client: 'P. Naidoo', title: 'Gate motor replacement and remote pairing', address: '22 Rand Avenue, Athlone', status: 'complete', progress: 100, quote: 14200, photos: 4, supervisor: 'Sipho Supervisor', noteDraft: '', history: [{ status: 'in_progress', note: 'Motor swapped, testing', when: '01 Sep' }, { status: 'complete', note: 'Signed off by client', when: '02 Sep' }] }
+    ],
+    quotes: [
+      { reference: 'Q-1191', jobRef: 'JOB-4408', title: 'Damp repair & electrical additions', status: 'quoted', lineItems: [['Strip and re-plaster lounge wall', 9400], ['Damp proofing system', 8600], ['Three plug points, chased and certified', 7000]], },
+      { reference: 'Q-1188', jobRef: 'JOB-4412', title: 'Driveway paving 90 m²', status: 'approved', lineItems: [['Excavation and sub-base', 14000], ['Interlocking pavers, 90 m²', 27600], ['Labour, 4 days, 3 man team', 14400]] }
+    ],
+    notifications: [
+      { title: 'Quote Q-1191 is ready', body: money(28750) + ' incl. VAT for the damp repair. Approve or decline in your portal.', when: '10 Sep 15:30', channel: 'Email + in-app', dot: '#123C7A' },
+      { title: 'Offer OFR-2039 countered', body: 'Riaan Agent countered at ' + money(380000) + ' on LST-140 Kuils River.', when: '30 Aug 09:05', channel: 'Email + in-app', dot: '#F7941D' },
+      { title: 'JOB-4412 is in progress', body: 'Sipho Supervisor uploaded 3 progress photos.', when: '11 Sep 07:12', channel: 'In-app', dot: '#1E9E5A' }
+    ]
+  };
+
+  flash = (toast) => { this.setState({ toast }); clearTimeout(this._t); this._t = setTimeout(() => this.setState({ toast: null }), 3200); };
+  notify = (title, body, dot) => this.setState((s) => ({ notifications: [{ title, body, when: 'just now', channel: 'Email + in-app', dot }].concat(s.notifications) }));
+  go = (route) => () => this.setState({ route, bellOpen: false });
+  setRole = (role) => () => {
+    const home = { public: 'home', client: 'client', admin: 'admin', agent: 'agent', supervisor: 'supervisor', owner: 'owner' }[role];
+    this.setState({ role, route: home, bellOpen: false });
+  };
+  openForm = (kind) => () => this.setState({ route: 'form', formKind: kind, formSent: false });
+  openListing = (id, amount) => () => this.setState({ route: 'listing', listingId: id, offerSent: false, offerAmount: amount || '', offerNote: '', routeInfo: null, routeFrom: '' });
+
+  componentDidMount() { this.syncMaps(); }
+  componentDidUpdate() { this.syncMaps(); }
+  componentWillUnmount() { clearTimeout(this._t); }
+
+  filtered() {
+    const { query, priceBand, propType } = this.state;
+    const q = query.trim().toLowerCase();
+    return LISTINGS.filter((l) => {
+      if (q && !(l.suburb.toLowerCase().includes(q) || l.title.toLowerCase().includes(q) || l.address.toLowerCase().includes(q) || l.id.toLowerCase().includes(q))) return false;
+      if (propType !== 'all' && l.type !== propType) return false;
+      if (priceBand === 'u700' && l.price >= 700000) return false;
+      if (priceBand === '700-1m' && (l.price < 700000 || l.price > 1000000)) return false;
+      if (priceBand === 'o1m' && l.price <= 1000000) return false;
+      return true;
+    });
+  }
+
+  tiles(map) {
+    window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+  }
+
+  syncMaps() {
+    if (!window.L) return;
+    if (this._listMap && this._listMapEl !== this._listEl) { this._listMap.remove(); this._listMap = null; this._pins = []; }
+    if (this._detailMap && this._detailMapEl !== this._detailEl) { this._detailMap.remove(); this._detailMap = null; this._detailPin = null; this._routeLine = null; }
+    if (this._listEl && this.state.route === 'listings') {
+      if (!this._listMap) {
+        this._listMap = window.L.map(this._listEl, { scrollWheelZoom: false });
+        this._listMapEl = this._listEl;
+        this.tiles(this._listMap);
+        this._pins = [];
+      }
+      const list = this.filtered();
+      (this._pins || []).forEach((m) => m.remove());
+      this._pins = list.map((l) => {
+        const icon = window.L.divIcon({ className: '', iconSize: [1, 1], html: '<div style="transform:translate(-50%,-100%);padding:5px 9px;border-radius:3px;background:#0A2550;color:#fff;font:700 13px/1 \'Barlow Condensed\',sans-serif;white-space:nowrap;box-shadow:0 3px 8px rgba(0,0,0,.3)">' + money(l.price) + '</div>' });
+        const m = window.L.marker([l.lat, l.lng], { icon }).addTo(this._listMap);
+        m.on('click', (ev) => { if (ev.originalEvent) ev.originalEvent.stopPropagation(); this.openListing(l.id)(); });
+        return m;
+      });
+      if (list.length) this._listMap.fitBounds(window.L.latLngBounds(list.map((l) => [l.lat, l.lng])).pad(0.3));
+      else this._listMap.setView([-34.0351, 18.4839], 10);
+      setTimeout(() => this._listMap && this._listMap.invalidateSize(), 60);
+    }
+    if (this._detailEl && this.state.route === 'listing') {
+      const l = LISTINGS.find((x) => x.id === this.state.listingId) || LISTINGS[0];
+      if (!this._detailMap) {
+        this._detailMap = window.L.map(this._detailEl, { scrollWheelZoom: false });
+        this._detailMapEl = this._detailEl;
+        this.tiles(this._detailMap);
+      }
+      if (this._detailPin) this._detailPin.remove();
+      this._detailPin = window.L.marker([l.lat, l.lng], {
+        icon: window.L.divIcon({ className: '', iconSize: [1, 1], html: '<div style="transform:translate(-50%,-100%);padding:5px 9px;border-radius:3px;background:#D8232A;color:#fff;font:700 13px/1 \'Barlow Condensed\',sans-serif;white-space:nowrap">' + l.id + '</div>' })
+      }).addTo(this._detailMap);
+      const info = this.state.routeInfo;
+      if (this._routeLine) { this._routeLine.remove(); this._routeLine = null; }
+      if (info) {
+        this._routeLine = window.L.polyline([[info.lat, info.lng], [l.lat, l.lng]], { color: '#F7941D', weight: 5, opacity: .9 }).addTo(this._detailMap);
+        this._detailMap.fitBounds(this._routeLine.getBounds().pad(0.25));
+      } else {
+        this._detailMap.setView([l.lat, l.lng], 14);
+      }
+      setTimeout(() => this._detailMap && this._detailMap.invalidateSize(), 60);
+    }
+  }
+
+  findRoute = () => {
+    const q = this.state.routeFrom.trim().toLowerCase();
+    const key = Object.keys(SUBURBS).find((k) => q.includes(k));
+    if (!key) { this.flash('Address not recognised — try a Cape Town suburb like Bellville or Muizenberg.'); return; }
+    const [lat, lng] = SUBURBS[key];
+    const l = LISTINGS.find((x) => x.id === this.state.listingId) || LISTINGS[0];
+    const dx = (l.lng - lng) * 92, dy = (l.lat - lat) * 111;
+    const straight = Math.sqrt(dx * dx + dy * dy);
+    const km = straight * 1.32;
+    const mins = Math.max(4, Math.round(km / 42 * 60));
+    this.setState({ routeInfo: { lat, lng, label: pretty(key.replace(/ /g, '_')), km: km.toFixed(1) + ' km', mins: mins + ' min' } });
+  };
+
+  submitOffer = () => {
+    const l = LISTINGS.find((x) => x.id === this.state.listingId);
+    const amt = parseInt(String(this.state.offerAmount).replace(/\D/g, ''), 10) || Math.round(l.price * 0.92);
+    const ref = 'OFR-' + (2050 + this.state.offers.length);
+    this.setState((s) => ({
+      offerSent: true, sentRef: ref, sentAmount: amt,
+      offers: [{ id: ref, buyer: 'Thandi Client', contact: '081 447 1180', listing: l.id + ' · ' + l.suburb, amount: amt, asking: l.price, submitted: 'today', status: 'pending', message: s.offerNote, mine: true, events: [{ action: 'submitted', detail: money(amt), when: 'just now' }] }].concat(s.offers)
+    }));
+    this.notify('Offer ' + ref + ' received', 'Your offer of ' + money(amt) + ' on ' + l.id + ' is with the listing agent.', '#F7941D');
+    this.flash('Offer ' + ref + ' submitted — the agent has been notified.');
+  };
+
+  offerAction = (id, action) => () => {
+    if (action === 'counter') { this.setState({ counterFor: id, counterVal: '' }); return; }
+    const status = action === 'approve' ? 'approved' : 'declined';
+    this.setState((s) => ({
+      offers: s.offers.map((o) => o.id === id ? Object.assign({}, o, { status, events: o.events.concat([{ action: status, detail: 'by Riaan Agent', when: 'just now' }]) }) : o)
+    }));
+    this.notify('Offer ' + id + ' ' + status, status === 'approved' ? 'Buyer connected to Riaan Agent to finalise off-platform.' : 'The buyer has been told the offer was not accepted.', status === 'approved' ? '#1E9E5A' : '#D8232A');
+    this.flash('Offer ' + id + ' ' + status + ' — buyer notified.');
+  };
+
+  sendCounter = (id) => () => {
+    const val = parseInt(String(this.state.counterVal).replace(/\D/g, ''), 10);
+    if (!val) { this.flash('Enter a counter amount first.'); return; }
+    this.setState((s) => ({
+      counterFor: null, counterVal: '',
+      offers: s.offers.map((o) => o.id === id ? Object.assign({}, o, { status: 'countered', counter: val, events: o.events.concat([{ action: 'countered', detail: money(val) + ' by Riaan Agent', when: 'just now' }]) }) : o)
+    }));
+    this.notify('Counteroffer on ' + id, 'The agent countered at ' + money(val) + '. Accept or decline in your portal.', '#F7941D');
+    this.flash('Counteroffer of ' + money(val) + ' sent to the buyer.');
+  };
+
+  respondCounter = (id, accept) => () => {
+    const status = accept ? 'approved' : 'declined';
+    this.setState((s) => ({
+      offers: s.offers.map((o) => o.id === id ? Object.assign({}, o, { status, amount: accept && o.counter ? o.counter : o.amount, events: o.events.concat([{ action: status, detail: accept ? 'counter accepted by buyer' : 'counter declined by buyer', when: 'just now' }]) }) : o)
+    }));
+    this.flash(accept ? 'Counter accepted — Riaan Agent will be in touch on 081 253 4300.' : 'Counter declined. The agent has been notified.');
+  };
+
+  setLeadStatus = (id, status) => () => {
+    this.setState((s) => ({ requests: s.requests.map((r) => r.id === id ? Object.assign({}, r, { status }) : r) }));
+    this.flash(id + ' set to ' + pretty(status) + '.');
+  };
+
+  convertLead = (id) => () => {
+    const r = this.state.requests.find((x) => x.id === id);
+    const draft = this.state.leadDrafts[id] || {};
+    const amount = parseInt(String(draft.quote || '').replace(/\D/g, ''), 10) || 25000;
+    const supervisor = draft.supervisor || 'Sipho Supervisor';
+    const ref = 'JOB-' + (4420 + this.state.jobs.length);
+    this.setState((s) => ({
+      requests: s.requests.map((x) => x.id === id ? Object.assign({}, x, { status: 'converted' }) : x),
+      jobs: [{ reference: ref, client: r.client, title: r.service, address: r.address, status: 'quoted', progress: 0, quote: amount, photos: 0, supervisor, noteDraft: '', history: [{ status: 'quoted', note: 'Converted from ' + id + ', assigned to ' + supervisor, when: 'today' }] }].concat(s.jobs)
+    }));
+    this.notify('Quote ready — ' + ref, money(amount) + ' incl. VAT. Approve or decline it in your portal.', '#123C7A');
+    this.flash(ref + ' created, assigned to ' + supervisor + ' at ' + money(amount) + '.');
+  };
+
+  setJobStatus = (ref, status) => () => {
+    const progress = { quoted: 0, approved: 10, in_progress: 55, on_hold: 55, complete: 100, cancelled: 0 }[status];
+    this.setState((s) => ({
+      jobs: s.jobs.map((j) => j.reference === ref ? Object.assign({}, j, { status, progress, history: j.history.concat([{ status, note: 'Status updated on site', when: 'just now' }]) }) : j)
+    }));
+    this.flash(ref + ' → ' + pretty(status) + '. Client notified.');
+  };
+
+  setProgress = (ref) => (e) => {
+    const progress = parseInt(e.target.value, 10);
+    this.setState((s) => ({ jobs: s.jobs.map((j) => j.reference === ref ? Object.assign({}, j, { progress }) : j) }));
+  };
+
+  addNote = (ref) => () => {
+    const j = this.state.jobs.find((x) => x.reference === ref);
+    if (!j.noteDraft.trim()) { this.flash('Type a site note first.'); return; }
+    this.setState((s) => ({ jobs: s.jobs.map((x) => x.reference === ref ? Object.assign({}, x, { noteDraft: '', history: x.history.concat([{ status: x.status, note: j.noteDraft, when: 'just now' }]) }) : x) }));
+    this.flash('Site note logged to ' + ref + ' history.');
+  };
+
+  addPhoto = (ref) => () => {
+    this.setState((s) => ({ jobs: s.jobs.map((j) => j.reference === ref ? Object.assign({}, j, { photos: Math.min(8, j.photos + 1) }) : j) }));
+    this.flash('Progress photo uploaded to job-photos (private bucket).');
+  };
+
+  quoteAction = (ref, status) => () => {
+    this.setState((s) => ({ quotes: s.quotes.map((q) => q.reference === ref ? Object.assign({}, q, { status }) : q) }));
+    this.flash('Quote ' + ref + ' ' + status + '.');
+  };
+
+  bookingAction = (id, status) => () => {
+    this.setState((s) => ({ bookings: s.bookings.map((b) => b.id === id ? Object.assign({}, b, { status }) : b) }));
+    this.flash(id + ' → ' + pretty(status) + '.');
+  };
+
+  submissionAction = (id, status, msg) => () => {
+    this.setState((s) => ({ submissions: s.submissions.map((p) => p.id === id ? Object.assign({}, p, { status }) : p) }));
+    this.flash(msg);
+  };
+
+  submitForm = () => {
+    const kind = this.state.formKind;
+    const ref = (kind === 'sell' ? 'PSB-' : kind === 'book' ? 'BKG-' : 'SRQ-') + (500 + Math.floor(Math.random() * 400));
+    this.setState({ formSent: true, formRef: ref });
+    this.flash('Submitted as ' + ref + ' — status new.');
+  };
+
+  renderVals() {
+    const s = this.state;
+    const isPublic = s.role === 'public';
+    const list = this.filtered();
+    const current = LISTINGS.find((l) => l.id === s.listingId) || LISTINGS[0];
+    const mine = s.offers.filter((o) => o.mine);
+    const pendingOffers = s.offers.filter((o) => o.status === 'pending').length;
+    const newLeads = s.requests.filter((r) => r.status === 'new').length;
+    const activeJobs = s.jobs.filter((j) => j.status === 'in_progress' || j.status === 'approved').length;
+
+    const navDefs = [['developers', 'Developers'], ['investments', 'Investments'], ['listings', 'Listings'], ['request', 'Request'], ['sell', 'Sell'], ['book', 'Book'], ['contact', 'Contact']];
+    const formRoutes = { request: 'request', sell: 'sell', book: 'book' };
+
+    const users = {
+      client: ['Thandi Client', 'client@prop3000.demo'], admin: ['Office Admin', 'admin@prop3000.demo'],
+      agent: ['Riaan Agent', 'agent@prop3000.demo'], supervisor: ['Sipho Supervisor', 'supervisor@prop3000.demo'],
+      owner: ["Leah's Dad", 'owner@prop3000.demo']
+    }[s.role] || ['Guest', ''];
+
+    const portalDefs = {
+      client: [['client', 'My portal'], ['offers', 'My offers']],
+      admin: [['admin', 'Lead triage'], ['jobs', 'Jobs'], ['bookings', 'Bookings']],
+      agent: [['agent', 'Offer console'], ['listings-admin', 'Listings']],
+      supervisor: [['supervisor', 'My jobs']],
+      owner: [['owner', 'Analytics'], ['admin', 'Leads'], ['agent', 'Offers'], ['jobs', 'Jobs']]
+    }[s.role] || [];
+
+    const heads = {
+      client: ['My portal', 'Quotes, jobs, requests and notifications in one place.'],
+      offers: ['My offers', 'Every offer you have put on a Prop3000 listing.'],
+      admin: ['Lead triage', newLeads + ' new service requests waiting to be actioned.'],
+      jobs: ['Jobs', activeJobs + ' active jobs across the Cape Peninsula.'],
+      bookings: ['Bookings', 'Site visits, renovation starts, viewings and consultations.'],
+      agent: ['Offer console', pendingOffers + ' offers awaiting approve, counter or decline.'],
+      'listings-admin': ['Listings', 'Published stock and offers received per listing.'],
+      supervisor: ['My jobs', 'Only the jobs assigned to you. Update status, progress and photos.'],
+      owner: ['Business summary', 'Read-only analytics across both divisions.']
+    }[s.route] || ['Dashboard', ''];
+
+    const formDefs = {
+      request: { kicker: 'Prop3000 Developers', title: 'Request a renovation quote', blurb: 'Tell us what needs doing, tick the trades involved and add photos. Office staff triage it the same day.', addrLabel: 'Property address', descLabel: 'Describe the work', descHint: 'e.g. re-tile the bathroom, replace the vanity, damp on the lounge wall…', cta: 'Send my request', confirm: 'Your request is on the office lead board with status new. You will be contacted within one working day and can follow it in your portal instead of phoning in.', isRequest: true, isSell: false, isBook: false },
+      sell: { kicker: 'Prop3000 Investments', title: 'Sell your property for cash', blurb: 'Fixer-uppers, distressed properties, vacant plots, incomplete builds and late estate properties. No agent fees, no repairs on your side.', addrLabel: 'Property address', descLabel: 'What is the situation?', descHint: 'e.g. inherited the house, roof damaged, tenants moved out…', cta: 'Get my cash offer', confirm: 'Your property submission is with the investments team. We review, book a viewing, then make a cash offer — you are under no obligation to accept it.', isRequest: false, isSell: true, isBook: false },
+      book: { kicker: 'Booking diary', title: 'Book a date', blurb: 'Site visits, renovation starts, property viewings and consultations. Hourly slots between 08:00 and 16:00.', addrLabel: 'Site address', descLabel: 'Anything we should know?', descHint: 'e.g. dogs on the property, access through the back gate…', cta: 'Request this slot', confirm: 'Your booking is in the diary with status requested. The office confirms it by email and SMS within one working day.', isRequest: false, isSell: false, isBook: true }
+    }[s.formKind];
+
+    const quoteRows = s.quotes.map((q) => {
+      const sub = q.lineItems.reduce((a, [, v]) => a + v, 0);
+      const vat = Math.round(sub * 0.15);
+      const job = s.jobs.find((j) => j.reference === q.jobRef);
+      return {
+        reference: q.reference, jobRef: q.jobRef, title: q.title, status: q.status, pretty: pretty(q.status),
+        bg: tone(q.status)[0], fg: tone(q.status)[1],
+        lineItems: q.lineItems.map(([name, v]) => ({ name, amount: money(v) })),
+        vatLabel: money(vat), totalLabel: money(sub + vat),
+        actionable: q.status === 'quoted',
+        approve: this.quoteAction(q.reference, 'approved'),
+        decline: this.quoteAction(q.reference, 'declined'),
+        jobTitle: job ? job.title : ''
+      };
+    });
+
+    const visibleJobs = s.role === 'supervisor' ? s.jobs.filter((j) => j.supervisor === 'Sipho Supervisor') : s.jobs;
+    const statusMix = [
+      { label: 'In progress', count: s.jobs.filter((j) => j.status === 'in_progress').length, color: '#F7941D' },
+      { label: 'Quoted', count: s.jobs.filter((j) => j.status === 'quoted').length, color: '#123C7A' },
+      { label: 'Complete', count: s.jobs.filter((j) => j.status === 'complete').length, color: '#1E9E5A' },
+      { label: 'On hold', count: s.jobs.filter((j) => j.status === 'on_hold').length, color: '#D8232A' }
+    ];
+    const mixTotal = statusMix.reduce((a, x) => a + x.count, 0) || 1;
+    let acc = 0;
+    const pieStops = statusMix.map((x) => {
+      const from = acc / mixTotal * 360; acc += x.count;
+      return x.color + ' ' + from.toFixed(1) + 'deg ' + (acc / mixTotal * 360).toFixed(1) + 'deg';
+    }).join(', ');
+
+    const stockValue = LISTINGS.filter((l) => l.status !== 'sold').reduce((a, l) => a + l.price, 0);
+    const quotedPipeline = s.jobs.filter((j) => j.status === 'quoted').reduce((a, j) => a + j.quote, 0);
+    const wonValue = s.jobs.filter((j) => j.status !== 'quoted' && j.status !== 'cancelled').reduce((a, j) => a + j.quote, 0);
+    const conversion = Math.round(s.requests.filter((r) => r.status === 'converted').length / s.requests.length * 100);
+
+    const statsByRoute = {
+      owner: [
+        { label: 'Quoted pipeline', value: money(quotedPipeline), note: s.jobs.filter((j) => j.status === 'quoted').length + ' jobs awaiting client approval', mark: '#123C7A' },
+        { label: 'Work won', value: money(wonValue), note: conversion + '% lead conversion', mark: '#1E9E5A' },
+        { label: 'Listing stock value', value: money(stockValue), note: LISTINGS.length + ' published listings', mark: '#F7941D' },
+        { label: 'Acquisition spend', value: money(1990000), note: '3 properties bought this year', mark: '#D8232A' }
+      ],
+      admin: [
+        { label: 'New leads', value: String(newLeads), note: 'awaiting first contact', mark: '#F7941D' },
+        { label: 'Quoted', value: String(s.requests.filter((r) => r.status === 'quoted').length), note: 'waiting on the client', mark: '#123C7A' },
+        { label: 'Active jobs', value: String(activeJobs), note: 'assigned to supervisors', mark: '#1E9E5A' },
+        { label: 'Bookings today', value: String(s.bookings.filter((b) => b.status === 'requested').length), note: 'requested, not yet confirmed', mark: '#D8232A' }
+      ],
+      agent: [
+        { label: 'Offers pending', value: String(pendingOffers), note: 'needs approve / counter / decline', mark: '#F7941D' },
+        { label: 'Countered', value: String(s.offers.filter((o) => o.status === 'countered').length), note: 'awaiting buyer response', mark: '#123C7A' },
+        { label: 'Approved', value: String(s.offers.filter((o) => o.status === 'approved').length), note: 'buyers connected to agents', mark: '#1E9E5A' },
+        { label: 'Stock value', value: money(stockValue), note: LISTINGS.length + ' listings live', mark: '#D8232A' }
+      ]
+    };
+
+    return {
+      showSwitcher: this.props.showRoleSwitcher !== false,
+      showChat: this.props.showChatWidget !== false,
+      waLink: WA + '?text=' + encodeURIComponent('Hi Prop3000, I have a question about my property.'),
+      waFormLink: WA + '?text=' + encodeURIComponent('Hi Prop3000, I submitted ' + (s.formRef || 'a request') + ' on the portal.'),
+      isPublic, isApp: !isPublic,
+      routeCrumb: (isPublic ? '/' : '/') + (s.route === 'home' ? '' : s.route),
+      roles: [['public', 'Public site'], ['client', 'Client'], ['admin', 'Admin'], ['agent', 'Agent'], ['supervisor', 'Supervisor'], ['owner', 'Owner']].map(([k, label]) => ({
+        label, pick: this.setRole(k),
+        bg: s.role === k ? '#F7941D' : 'transparent', fg: s.role === k ? '#0A2550' : '#9FB2CD', line: s.role === k ? '#F7941D' : '#1B3A68'
+      })),
+      navItems: navDefs.map(([k, label]) => ({
+        label,
+        go: formRoutes[k] ? this.openForm(k) : this.go(k),
+        fg: s.route === k || (formRoutes[k] && s.route === 'form' && s.formKind === k) ? '#123C7A' : '#3B4658',
+        mark: s.route === k || (formRoutes[k] && s.route === 'form' && s.formKind === k) ? '#F7941D' : 'transparent'
+      })),
+      goHome: this.go('home'), goDevelopers: this.go('developers'), goInvestments: this.go('investments'),
+      goListings: this.go('listings'), goContact: this.go('contact'), goAuth: this.go('auth'),
+      goRequest: this.openForm('request'), goSell: this.openForm('sell'), goBook: this.openForm('book'),
+      goClient: this.setRole('client'),
+      goClientOffers: () => this.setState({ role: 'client', route: 'offers' }),
+
+      r_home: isPublic && s.route === 'home',
+      r_developers: isPublic && s.route === 'developers',
+      r_investments: isPublic && s.route === 'investments',
+      r_listings: isPublic && s.route === 'listings',
+      r_listing: isPublic && s.route === 'listing',
+      r_form: isPublic && s.route === 'form',
+      r_contact: isPublic && s.route === 'contact',
+      r_auth: isPublic && s.route === 'auth',
+
+      heroBadges: [{ label: 'No agent fees' }, { label: 'Fast turnaround' }, { label: 'Serious cash buyers' }],
+      services: SERVICES.map((name) => ({ name })),
+      buyTypes: [{ name: 'Fixer-uppers' }, { name: 'Distressed properties' }, { name: 'Vacant plots & land' }, { name: 'Incomplete building projects' }, { name: 'Late estate properties' }],
+      cashSteps: [
+        { num: '1', name: 'Submit the property', desc: 'Address, type, condition and a few photos — two minutes on your phone.' },
+        { num: '2', name: 'We view it', desc: 'A viewing is booked in the diary, usually within three working days.' },
+        { num: '3', name: 'Cash offer', desc: 'A written offer based on the property as it stands. No repairs required.' },
+        { num: '4', name: 'You decide', desc: 'Accept and our attorney handles transfer, or walk away. No commission either way.' }
+      ],
+
+      listingCount: LISTINGS.length,
+      filteredCount: list.length,
+      featured: LISTINGS.slice(0, 3).map((l) => ({
+        suburb: l.suburb, title: l.title, stand: l.stand, beds: l.beds, pretty: pretty(l.status),
+        priceLabel: money(l.price), open: this.openListing(l.id)
+      })),
+      visibleListings: list.map((l) => ({
+        suburb: l.suburb, title: l.title, type: l.type, stand: l.stand, beds: l.beds, baths: l.baths,
+        pretty: pretty(l.status), bg: tone(l.status)[0], fg: tone(l.status)[1],
+        priceLabel: money(l.price), cardLine: l.id === s.listingId ? '#F7941D' : '#D9DFE8',
+        open: this.openListing(l.id), offer: this.openListing(l.id, String(Math.round(l.price * 0.92)))
+      })),
+      query: s.query,
+      setQuery: (e) => this.setState({ query: e.target.value }),
+      setPriceBand: (e) => this.setState({ priceBand: e.target.value }),
+      setPropType: (e) => this.setState({ propType: e.target.value }),
+      priceBands: [{ value: 'all', label: 'Any price' }, { value: 'u700', label: 'Under R700 000' }, { value: '700-1m', label: 'R700 000 – R1m' }, { value: 'o1m', label: 'Over R1m' }],
+      propTypes: [{ value: 'all', label: 'Any type' }, { value: 'House', label: 'House' }, { value: 'Townhouse', label: 'Townhouse' }, { value: 'Vacant land', label: 'Vacant land' }, { value: 'Incomplete build', label: 'Incomplete build' }],
+      mapRef: (el) => {
+        this._listEl = el;
+        if (!el && this._listMap) { this._listMap.remove(); this._listMap = null; this._listMapEl = null; this._pins = []; }
+      },
+      detailMapRef: (el) => {
+        this._detailEl = el;
+        if (!el && this._detailMap) { this._detailMap.remove(); this._detailMap = null; this._detailMapEl = null; this._detailPin = null; this._routeLine = null; }
+      },
+
+      current: {
+        suburb: current.suburb, type: current.type, title: current.title, address: current.address,
+        size: current.size, stand: current.stand, beds: current.beds, baths: current.baths, cond: current.cond,
+        pretty: pretty(current.status), priceLabel: money(current.price)
+      },
+      routeFrom: s.routeFrom,
+      setRouteFrom: (e) => this.setState({ routeFrom: e.target.value }),
+      findRoute: this.findRoute,
+      hasRoute: !!s.routeInfo,
+      routeLabel: s.routeInfo ? s.routeInfo.label : '',
+      routeDistance: s.routeInfo ? s.routeInfo.km : '',
+      routeDuration: s.routeInfo ? s.routeInfo.mins : '',
+
+      offerFormOpen: !s.offerSent, offerSent: s.offerSent,
+      offerAmount: s.offerAmount, offerNote: s.offerNote,
+      setOfferAmount: (e) => this.setState({ offerAmount: e.target.value }),
+      setOfferNote: (e) => this.setState({ offerNote: e.target.value }),
+      submitOffer: this.submitOffer,
+      sentOfferRef: s.sentRef,
+      sentOfferLine: money(s.sentAmount) + ' on ' + current.id,
+
+      form: formDefs, formOpen: !s.formSent, formSent: s.formSent, formRef: s.formRef, submitForm: this.submitForm,
+      serviceChips: SERVICES.map((name) => {
+        const on = s.picked.includes(name);
+        return { name, line: on ? '#123C7A' : '#D9DFE8', bg: on ? '#123C7A' : '#FFFFFF', fg: on ? '#FFFFFF' : '#0F1B2E',
+          toggle: () => this.setState((st) => ({ picked: on ? st.picked.filter((p) => p !== name) : st.picked.concat(name) })) };
+      }),
+      bookingTypes: [{ value: 'site_visit', label: 'Site visit' }, { value: 'renovation_start', label: 'Renovation start' }, { value: 'property_viewing', label: 'Property viewing' }, { value: 'consultation', label: 'Consultation' }],
+      setBookingType: (e) => this.setState({ bookingType: e.target.value }),
+      slots: ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00'].map((label) => {
+        const on = s.slot === label;
+        return { label, pick: () => this.setState({ slot: label }), line: on ? '#123C7A' : '#D9DFE8', bg: on ? '#123C7A' : '#FFFFFF', fg: on ? '#FFFFFF' : '#0F1B2E' };
+      }),
+
+      contactRows: [
+        { label: 'WhatsApp', value: '081 253 4300', note: 'Fastest route to a human' },
+        { label: 'Office', value: '021 705 1867', note: 'Mon–Fri 08:00–17:00, Sat 08:00–13:00' },
+        { label: 'Email', value: 'info@prop3000.co.za', note: 'We reply within one working day' },
+        { label: 'Area', value: 'Cape Town', note: 'Northern & Southern suburbs, Cape Flats, Helderberg' },
+        { label: 'Divisions', value: 'Developers · Investments', note: 'Renovations and cash property purchases' }
+      ],
+      demoAccounts: [
+        { name: 'Thandi Client', email: 'client@prop3000.demo', role: 'Client', pick: this.setRole('client') },
+        { name: 'Office Admin', email: 'admin@prop3000.demo', role: 'Admin', pick: this.setRole('admin') },
+        { name: 'Riaan Agent', email: 'agent@prop3000.demo', role: 'Agent', pick: this.setRole('agent') },
+        { name: 'Sipho Supervisor', email: 'supervisor@prop3000.demo', role: 'Supervisor', pick: this.setRole('supervisor') },
+        { name: "Leah's Dad", email: 'owner@prop3000.demo', role: 'Owner', pick: this.setRole('owner') }
+      ],
+
+      roleLabel: s.role, userName: users[0], userEmail: users[1],
+      portalLinks: portalDefs.map(([k, label]) => ({
+        label, go: this.go(k),
+        bg: s.route === k ? '#123C7A' : 'transparent', fg: s.route === k ? '#FFFFFF' : '#9FB2CD', mark: s.route === k ? '#F7941D' : 'transparent'
+      })),
+      appTitle: heads[0], appSub: heads[1],
+      exitApp: this.setRole('public'),
+      notifCount: String(s.notifications.length),
+      bellOpen: s.bellOpen, toggleBell: () => this.setState({ bellOpen: !s.bellOpen }),
+      notifications: s.notifications,
+
+      v_stats: s.route === 'owner' || s.route === 'admin' || s.route === 'agent',
+      v_charts: s.route === 'owner',
+      v_leads: s.route === 'admin',
+      v_submissions: s.route === 'admin',
+      v_bookings: s.route === 'admin' || s.route === 'bookings',
+      v_jobs: s.route === 'jobs' || s.route === 'supervisor',
+      v_quotes: s.route === 'client',
+      v_myrequests: s.route === 'client',
+      v_offers: s.route === 'agent' || s.route === 'offers' || s.route === 'listings-admin',
+      canEditJobs: s.role === 'supervisor' || s.role === 'admin',
+
+      stats: statsByRoute[s.route] || statsByRoute.owner,
+      leadBars: [['Apr', 22], ['May', 28], ['Jun', 26], ['Jul', 34], ['Aug', 31], ['Sep', 37]].map(([label, v], i) => ({
+        label, value: String(v), h: Math.round(v / 40 * 100) + '%', color: i === 5 ? '#F7941D' : '#C3CFDF'
+      })),
+      stageBars: [
+        { name: 'Requested', value: money(186000), w: '34%', color: '#C3CFDF' },
+        { name: 'Quoted', value: money(quotedPipeline || 412000), w: '58%', color: '#123C7A' },
+        { name: 'In progress', value: money(620000), w: '78%', color: '#F7941D' },
+        { name: 'Complete', value: money(940000), w: '96%', color: '#1E9E5A' }
+      ],
+      pieGradient: 'conic-gradient(' + pieStops + ')',
+      pieLegend: statusMix.map((x) => ({ label: x.label, count: String(x.count), color: x.color })),
+      tradeBars: [['Renovations', 12], ['Plumbing', 9], ['Electrical', 7], ['Paving', 5], ['Gate motors', 4]].map(([name, count]) => ({
+        name, count: String(count), w: Math.round(count / 12 * 100) + '%'
+      })),
+
+      leads: s.requests.map((r) => {
+        const draft = s.leadDrafts[r.id] || {};
+        return {
+          id: r.id, client: r.client, service: r.service, address: r.address, phone: r.phone, email: r.email,
+          budget: r.budget, received: r.received, description: r.description,
+          pretty: pretty(r.status), bg: tone(r.status)[0], fg: tone(r.status)[1],
+          triage: ['contacted', 'quoted', 'declined'].map((st) => {
+            const on = r.status === st;
+            return { label: pretty(st), set: this.setLeadStatus(r.id, st), line: on ? '#123C7A' : '#D9DFE8', bg: on ? '#123C7A' : '#FFFFFF', fg: on ? '#FFFFFF' : '#3B4658' };
+          }),
+          quoteAmount: draft.quote || '',
+          setQuote: (e) => { const v = e.target.value; this.setState((st) => ({ leadDrafts: Object.assign({}, st.leadDrafts, { [r.id]: Object.assign({}, st.leadDrafts[r.id], { quote: v }) }) })); },
+          setSupervisor: (e) => { const v = e.target.value; this.setState((st) => ({ leadDrafts: Object.assign({}, st.leadDrafts, { [r.id]: Object.assign({}, st.leadDrafts[r.id], { supervisor: v }) }) })); },
+          convert: this.convertLead(r.id)
+        };
+      }),
+      supervisors: [{ value: 'Sipho Supervisor', label: 'Sipho Supervisor' }, { value: 'Johan Pretorius', label: 'Johan Pretorius' }, { value: 'Ruan Botha', label: 'Ruan Botha' }],
+
+      submissions: s.submissions.map((p) => ({
+        id: p.id, address: p.address, propertyType: p.propertyType, condition: p.condition, client: p.client,
+        askingLabel: money(p.asking), pretty: pretty(p.status), bg: tone(p.status)[0], fg: tone(p.status)[1],
+        makeOffer: this.submissionAction(p.id, 'offer_made', 'Cash offer drafted for ' + p.id + ' — client notified.'),
+        bookViewing: this.submissionAction(p.id, 'viewing_booked', 'Viewing booked for ' + p.id + ' (status requested).')
+      })),
+
+      bookings: s.bookings.map((b) => ({
+        date: b.date, slot: b.slot, prettyType: pretty(b.type), client: b.client, address: b.address,
+        pretty: pretty(b.status), bg: tone(b.status)[0], fg: tone(b.status)[1],
+        confirm: this.bookingAction(b.id, 'confirmed'),
+        complete: this.bookingAction(b.id, 'completed'),
+        assign: () => this.flash(b.id + ' assigned to Sipho Supervisor.')
+      })),
+
+      jobs: visibleJobs.map((j) => ({
+        reference: j.reference, client: j.client, title: j.title, address: j.address,
+        pretty: pretty(j.status), bg: tone(j.status)[0], fg: tone(j.status)[1],
+        quoteLabel: money(j.quote), progress: j.progress, progressW: j.progress + '%',
+        setProgress: this.setProgress(j.reference),
+        statusButtons: ['approved', 'in_progress', 'on_hold', 'complete'].map((st) => {
+          const on = j.status === st;
+          return { label: pretty(st), set: this.setJobStatus(j.reference, st), line: on ? '#123C7A' : '#D9DFE8', bg: on ? '#123C7A' : '#FFFFFF', fg: on ? '#FFFFFF' : '#3B4658' };
+        }),
+        photos: Array.from({ length: j.photos }, (_, i) => ({ i })),
+        addPhoto: this.addPhoto(j.reference),
+        noteDraft: j.noteDraft,
+        setNote: (e) => { const v = e.target.value; this.setState((st) => ({ jobs: st.jobs.map((x) => x.reference === j.reference ? Object.assign({}, x, { noteDraft: v }) : x) })); },
+        addNote: this.addNote(j.reference),
+        history: j.history.map((h) => ({ status: pretty(h.status), note: h.note, when: h.when }))
+      })),
+
+      quotes: quoteRows,
+      myRequests: s.requests.filter((r) => r.client === 'Thandi Client').map((r) => ({
+        id: r.id, date: r.received, title: r.service, note: r.address, pretty: pretty(r.status), bg: tone(r.status)[0], fg: tone(r.status)[1]
+      })).concat(s.bookings.filter((b) => b.client === 'Thandi Client').map((b) => ({
+        id: b.id, date: b.date + ' · ' + b.slot, title: pretty(b.type), note: b.address, pretty: pretty(b.status), bg: tone(b.status)[0], fg: tone(b.status)[1]
+      }))),
+
+      offerQueue: (s.route === 'offers' ? mine : s.offers).map((o) => ({
+        id: o.id, buyer: o.buyer, contact: o.contact, listing: o.listing, submitted: o.submitted,
+        amountLabel: money(o.amount), askingLabel: money(o.asking),
+        gap: (o.amount >= o.asking ? '+' : '−') + money(Math.abs(o.asking - o.amount)),
+        note: o.message, hasNote: !!o.message,
+        pretty: pretty(o.status), bg: tone(o.status)[0], fg: tone(o.status)[1],
+        agentActions: (s.role === 'agent' || s.role === 'owner') && o.status === 'pending' && s.counterFor !== o.id,
+        clientCounter: s.role === 'client' && o.status === 'countered',
+        settled: o.status === 'approved' || o.status === 'declined',
+        outcome: o.status === 'approved' ? 'Approved — buyer connected to Riaan Agent, 081 253 4300' : 'Declined and closed',
+        counterLabel: money(o.counter || 0),
+        countering: s.counterFor === o.id,
+        approve: this.offerAction(o.id, 'approve'),
+        decline: this.offerAction(o.id, 'decline'),
+        counter: this.offerAction(o.id, 'counter'),
+        sendCounter: this.sendCounter(o.id),
+        acceptCounter: this.respondCounter(o.id, true),
+        declineCounter: this.respondCounter(o.id, false),
+        events: o.events || [], hasEvents: !!(o.events && o.events.length)
+      })),
+      counterVal: s.counterVal,
+      setCounterVal: (e) => this.setState({ counterVal: e.target.value }),
+      cancelCounter: () => this.setState({ counterFor: null, counterVal: '' }),
+
+      toast: s.toast
+    };
+  }
+}
+
+</script>
+</body>
+</html>
