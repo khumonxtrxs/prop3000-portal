@@ -1,3 +1,8 @@
+## Live Environments
+
+- Prod: https://p3000portal.prop3000.workers.dev/
+- Staging: https://p3000portal-staging.prop3000.workers.dev/
+
 # Introduction 
 TODO: Give a short introduction of your project. Let this section explain the objectives or the motivation behind this project. 
 
