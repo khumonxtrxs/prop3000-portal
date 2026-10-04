@@ -21,8 +21,10 @@ npm run dev
 | `npm run lint` | ESLint |
 | `npx tsc --noEmit` | Type check |
 | `npm run format` | Prettier |
+| `npx supabase db reset` | Fresh local DB with all migrations and demo seed data |
 | `npm run emulators` | Local Firebase emulators (needs Java) |
 | `npm run test:rules` | Security rule tests, with the emulators running |
+| `npm run seed:demo-users` | Creates or updates the five Firebase demo accounts and their `user_roles/{uid}` documents |
 
 ## Where things are
 
@@ -110,7 +112,7 @@ Supabase still serves the app until that migration lands, so both sets of variab
 ```sh
 npm run emulators          # auth 9099, firestore 8081, storage 9199, UI on http://localhost:4000
 ```
-Set `VITE_FIREBASE_EMULATORS=true` in `.env` so the app connects to them. Java must be installed.
+Set `VITE_FIREBASE_EMULATORS=true` in `.env` so the app connects to them. Java SE 21 must be installed.
 Firestore uses 8081 because the dev server already holds 8080.
 
 `.firebaserc` is git-ignored, so everyone can point at their own project. That's why the deploy
