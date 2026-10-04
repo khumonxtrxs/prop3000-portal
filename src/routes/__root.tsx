@@ -114,15 +114,33 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+// function AuthSync() {
+//   const { session } = useAuth();
+//   const router = useRouter();
+//   const queryClient = useQueryClient();
+//   const userId = session?.user?.id ?? null;
+
+//   useEffect(() => {
+//     router.invalidate();
+//     if (userId) queryClient.invalidateQueries();
+//   }, [userId, router, queryClient]);
+
+//   return null;
+// }
+
 function AuthSync() {
-  const { session } = useAuth();
+  const { user } = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const userId = session?.user?.id ?? null;
+
+  const userId = user?.uid ?? null;
 
   useEffect(() => {
     router.invalidate();
-    if (userId) queryClient.invalidateQueries();
+
+    if (userId) {
+      queryClient.invalidateQueries();
+    }
   }, [userId, router, queryClient]);
 
   return null;
