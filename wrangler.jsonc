@@ -1,0 +1,27 @@
+{
+    "name": "p3000portal",
+    "compatibility_date": "2026-10-04",
+    "compatibility_flags": [
+        "nodejs_compat"
+    ],
+    "main": ".output/server/index.mjs",
+    "assets": {
+        "binding": "ASSETS",
+        "directory": ".output/public"
+    },
+    "no_bundle": true,
+    "rules": [
+        {
+            "type": "ESModule",
+            "globs": [
+                "**/*.mjs",
+                "**/*.js"
+            ]
+        }
+    ],
+    "env": {
+        "staging": {
+            "name": "p3000portal-staging"
+        }
+    }
+}
