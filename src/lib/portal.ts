@@ -25,18 +25,7 @@ export function portalLinks(roles: AppRole[]): PortalLink[] {
   return links;
 }
 
-export const STATUS_TONE: Record<string, string> = {
-  new: "bg-secondary text-foreground",
-  contacted: "bg-accent/15 text-accent",
-  quoted: "bg-brick/15 text-brick",
-  approved: "bg-accent/20 text-accent",
-  in_progress: "bg-accent/20 text-accent",
-  converted: "bg-accent/20 text-accent",
-  complete: "bg-accent/25 text-accent",
-  declined: "bg-destructive/15 text-destructive",
-  cancelled: "bg-destructive/15 text-destructive",
-  on_hold: "bg-muted text-muted-foreground",
-};
+
 
 /** Groups rows into { name, value } counts for charts. */
 export function countBy<T>(rows: T[], key: (row: T) => string) {

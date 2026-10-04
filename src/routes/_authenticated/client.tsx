@@ -2,7 +2,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Bell, Check, FileText, Hammer, Home, Loader2, X } from "lucide-react";
-import { Empty, Panel, PortalShell, StatCard, StatusPill } from "@/components/portal/PortalShell";
+import { Empty, Panel, PortalShell, StatCard } from "@/components/portal/PortalShell";
+import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -125,7 +126,7 @@ function ClientDashboard() {
                         {quote.valid_until ? `valid to ${shortDate(quote.valid_until)}` : "no expiry"}
                       </p>
                     </div>
-                    <StatusPill status={quote.status} />
+                    <StatusBadge status={quote.status} />
                   </div>
                   <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
                     {((quote.line_items as QuoteLine[]) ?? []).map((line, index) => (
@@ -192,7 +193,7 @@ function ClientDashboard() {
                 <li key={job.id}>
                   <div className="flex items-center justify-between gap-3">
                     <p className="font-semibold">{job.title}</p>
-                    <StatusPill status={job.status} />
+                    <StatusBadge status={job.status} />
                   </div>
                   <p className="text-muted-foreground">
                     {job.address} · {job.reference} · {money(job.quote_amount)}
@@ -227,7 +228,7 @@ function ClientDashboard() {
                         {property.reference} · {prettyStatus(property.condition)} · our offer {money(property.offer_amount)}
                       </p>
                     </div>
-                    <StatusPill status={property.status} />
+                    <StatusBadge status={property.status} />
                   </div>
                   {property.offer_amount ? (
                     <Button asChild size="sm" variant="brick" className="mt-3">
@@ -266,7 +267,7 @@ function ClientDashboard() {
                       {request.address} · {request.reference}
                     </p>
                   </div>
-                  <StatusPill status={request.status} />
+                  <StatusBadge status={request.status} />
                 </li>
               ))}
             </ul>
@@ -293,7 +294,7 @@ function ClientDashboard() {
                       {shortDate(booking.scheduled_date)} · {booking.scheduled_time.slice(0, 5)}
                     </p>
                   </div>
-                  <StatusPill status={booking.status} />
+                  <StatusBadge status={booking.status} />
                 </li>
               ))}
             </ul>

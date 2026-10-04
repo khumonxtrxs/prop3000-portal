@@ -15,6 +15,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { getPublicListing } from "@/lib/listings.functions";
 import { COMPANY, money, prettyStatus } from "@/lib/prop3000";
+import { StatusBadge } from "@/components/StatusBadge";
 
 const listingQuery = (id: string) =>
   queryOptions({
@@ -127,9 +128,10 @@ function ListingDetail() {
 
         <div className="mt-4 grid gap-10 lg:grid-cols-5">
           <div className="lg:col-span-3">
-            <span className="rounded-full bg-secondary px-2 py-1 text-xs font-semibold uppercase">
-              {prettyStatus(listing.status)} · {listing.reference}
-            </span>
+           <div className="flex items-center gap-2">
+  <StatusBadge status={listing.status} />
+  <span className="text-label text-[11px] text-muted-foreground">{listing.reference}</span>
+</div>
             <h1 className="text-display mt-3 text-4xl">{listing.title}</h1>
             <p className="mt-2 flex items-start gap-2 text-muted-foreground">
               <MapPinIcon className="mt-1 size-4 shrink-0 text-brick" />

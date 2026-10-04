@@ -4,7 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Banknote, Briefcase, CalendarDays, Check, Home, Loader2, UserCheck, X } from "lucide-react";
 import { CountBars, StatusPie, TrendChart } from "@/components/portal/Charts";
-import { Empty, Panel, PortalShell, StatCard, StatusPill } from "@/components/portal/PortalShell";
+import { Empty, Panel, PortalShell, StatCard } from "@/components/portal/PortalShell";
+import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
@@ -245,7 +246,7 @@ function AdminDashboard() {
                       </p>
                       <p className="mt-1 text-sm">{lead.description}</p>
                     </div>
-                    <StatusPill status={lead.status} />
+                    <StatusBadge status={lead.status} />
                   </div>
 
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -326,7 +327,7 @@ function AdminDashboard() {
                         {money(property.asking_price)} · our offer {money(property.offer_amount)}
                       </p>
                     </div>
-                    <StatusPill status={property.status} />
+                    <StatusBadge status={property.status} />
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {["reviewing", "viewing_booked", "accepted", "purchased", "declined"].map((status) => (

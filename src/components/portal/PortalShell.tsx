@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { SiteLayout } from "@/components/site/SiteLayout";
 import { useAuth } from "@/hooks/useAuth";
-import { portalLinks, STATUS_TONE } from "@/lib/portal";
-import { prettyStatus } from "@/lib/prop3000";
+import { portalLinks } from "@/lib/portal";
+
 
 export function PortalShell({
   title,
@@ -68,17 +68,6 @@ export function StatCard({
   );
 }
 
-export function StatusPill({ status }: { status: string }) {
-  return (
-    <span
-      className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide ${
-        STATUS_TONE[status] ?? "bg-secondary text-foreground"
-      }`}
-    >
-      {prettyStatus(status)}
-    </span>
-  );
-}
 
 export function Panel({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (

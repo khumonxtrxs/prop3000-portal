@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { CalendarDays, CheckCircle2, HardHat, Images, Loader2 } from "lucide-react";
 import { CountBars } from "@/components/portal/Charts";
-import { Empty, Panel, PortalShell, StatCard, StatusPill } from "@/components/portal/PortalShell";
+import { Empty, Panel, PortalShell, StatCard } from "@/components/portal/PortalShell";
 import { PhotoUpload } from "@/components/PhotoUpload";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,6 +12,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { countBy } from "@/lib/portal";
 import { JOB_STATUSES, money, prettyStatus, shortDate } from "@/lib/prop3000";
+import { StatusBadge } from "@/components/StatusBadge";
 
 export const Route = createFileRoute("/_authenticated/supervisor")({
   head: () => ({
@@ -191,7 +192,7 @@ function SupervisorDashboard() {
           <Empty>No jobs assigned to you yet. The office assigns jobs when a lead is converted.</Empty>
         ) : (
           rows.map((job) => (
-            <Panel key={job.id} title={job.title} action={<StatusPill status={job.status} />}>
+            <Panel key={job.id} title={job.title} action={<StatusBadge status={job.status} />}>
               <p className="text-sm text-muted-foreground">
                 {job.address} · {job.client_name} · {job.reference} · {money(job.quote_amount)}
               </p>
@@ -275,7 +276,7 @@ function SupervisorDashboard() {
               {(history.data ?? []).map((entry) => (
                 <li key={entry.id} className="flex items-start justify-between gap-3 py-3">
                   <div>
-                    <p className="font-semibold">{prettyStatus(entry.status)}</p>
+                    <StatusBadge status={entry.status} />
                     {entry.note && <p className="text-muted-foreground">{entry.note}</p>}
                   </div>
                   <span className="text-xs text-muted-foreground">{shortDate(entry.created_at)}</span>

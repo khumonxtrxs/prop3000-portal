@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { money, prettyStatus, whatsappLink } from "@/lib/prop3000";
+import { StatusBadge } from "@/components/StatusBadge";
 
 export const Route = createFileRoute("/_authenticated/offers")({
   head: () => ({
@@ -76,13 +77,7 @@ function OffersPage() {
                     <h2 className="text-display text-xl">{offer.listings?.title ?? "Listing"}</h2>
                     <p className="text-sm text-muted-foreground">{offer.listings?.address}</p>
                   </div>
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide ${
-                      TONE[offer.status] ?? "bg-secondary"
-                    }`}
-                  >
-                    {prettyStatus(offer.status)}
-                  </span>
+                  <StatusBadge status={offer.status} />
                 </div>
 
                 <div className="mt-4 flex flex-wrap gap-6 text-sm">
