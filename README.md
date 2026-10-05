@@ -594,6 +594,12 @@ Separate staging and production environments reduce deployment risk by allowing 
 
 ---
 
+##Youtube Presentation 
+
+Link: https://youtu.be/5BnDWcfVX5s
+
+---
+
 ## Team
 
 | Team Member | Role | Responsibilities |
