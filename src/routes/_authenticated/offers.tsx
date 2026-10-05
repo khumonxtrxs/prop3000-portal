@@ -33,15 +33,15 @@ function OffersPage() {
   const { user } = useAuth();
 
   const { data, isLoading } = useQuery({
-    queryKey: ["my-offers", user?.id],
-    enabled: !!user?.id,
+    queryKey: ["my-offers", user?.uid],
+    enabled: !!user?.uid,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("offers")
         .select(
           "id, reference, amount, status, counter_amount, message, agent_notes, created_at, listing_id, listings(title, address, price, agent_name, agent_phone, agent_email)",
         )
-        .eq("client_id", user!.id)
+        .eq("client_id", user!.uid)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;

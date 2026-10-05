@@ -43,7 +43,7 @@ export const Route = createFileRoute("/listings/$id")({
     <SiteLayout>
       <div className="mx-auto max-w-3xl px-4 py-24 text-center">
         <h1 className="text-display text-3xl">Listing unavailable</h1>
-        <p className="mt-3 text-muted-foreground">{error.message}</p>
+        <p className="mt-3 text-muted-foreground">{error instanceof Error ? error.message : String(error)}</p>
       </div>
     </SiteLayout>
   ),
@@ -60,7 +60,7 @@ export const Route = createFileRoute("/listings/$id")({
 function ListingDetail() {
   const { id } = Route.useParams();
   const { data: listing } = useSuspenseQuery(listingQuery(id));
-  const { session, user } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [amount, setAmount] = useState("");
   const [phone, setPhone] = useState("");
@@ -100,8 +100,8 @@ function ListingDetail() {
       .from("offers")
       .insert({
         listing_id: listing!.id,
-        client_id: user!.id,
-        client_name: (user!.user_metadata?.["full_name"] as string) || user!.email || "Client",
+        client_id: user!.uid,
+        client_name: user!.displayName || user!.email || "Client",
         client_email: user!.email ?? "",
         client_phone: phone.trim() || null,
         amount: value,
@@ -181,7 +181,7 @@ function ListingDetail() {
                     <Link to="/offers">Track my offers</Link>
                   </Button>
                 </div>
-              ) : session ? (
+              ) : user ? (
                 <form onSubmit={submitOffer} className="mt-4 space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="o_amount">Your offer (R)</Label>
