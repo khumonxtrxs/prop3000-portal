@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { supabase } from "@/integrations/supabase/client";
+import { insertRow, newReference } from "@/integrations/firebase/db";
 import { BOOKING_TYPES, TIME_SLOTS } from "@/lib/prop3000";
 
 export const Route = createFileRoute("/book")({
@@ -51,27 +51,35 @@ function BookPage() {
       return;
     }
     setBusy(true);
-    const { data, error } = await supabase
-      .from("bookings")
-      .insert({
+    const ref = newReference("BK");
+    try {
+      await insertRow("bookings", {
+        reference: ref,
+        client_id: null,
         full_name: form.full_name.trim(),
         email: form.email.trim(),
         phone: form.phone.trim(),
         address: form.address.trim() || null,
+        latitude: null,
+        longitude: null,
         booking_type: form.booking_type,
         scheduled_date: form.scheduled_date,
         scheduled_time: form.scheduled_time,
         notes: form.notes.trim() || null,
-      })
-      .select("reference")
-      .single();
-    setBusy(false);
-    if (error) {
+        service_request_id: null,
+        property_submission_id: null,
+        job_id: null,
+        assigned_to: null,
+        status: "requested",
+      });
+    } catch (error) {
       console.error(error);
       toast.error("We couldn't book that slot. Please try again.");
       return;
+    } finally {
+      setBusy(false);
     }
-    setReference(data.reference);
+    setReference(ref);
     toast.success("Booking requested");
   }
 

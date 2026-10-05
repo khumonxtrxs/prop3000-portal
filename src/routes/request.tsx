@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { supabase } from "@/integrations/supabase/client";
+import { insertRow, newReference } from "@/integrations/firebase/db";
 import { BUDGET_RANGES } from "@/lib/prop3000";
 
 export const Route = createFileRoute("/request")({
@@ -66,28 +66,33 @@ function RequestPage() {
       return;
     }
     setBusy(true);
-    const { data, error } = await supabase
-      .from("service_requests")
-      .insert({
+    const ref = newReference("SR");
+    try {
+      await insertRow("service_requests", {
+        reference: ref,
+        client_id: null,
         full_name: form.full_name.trim(),
         email: form.email.trim(),
         phone: form.phone.trim(),
         address: form.address.trim(),
+        latitude: null,
+        longitude: null,
         description: form.description.trim(),
         budget_range: form.budget_range || null,
         preferred_start_date: form.preferred_start_date || null,
         service_types: types,
         photo_paths: photos,
-      })
-      .select("reference")
-      .single();
-    setBusy(false);
-    if (error) {
+        status: "new",
+        admin_notes: null,
+      });
+    } catch (error) {
       console.error(error);
       toast.error("We couldn't send that. Please try again.");
       return;
+    } finally {
+      setBusy(false);
     }
-    setReference(data.reference);
+    setReference(ref);
     toast.success("Request received");
   }
 

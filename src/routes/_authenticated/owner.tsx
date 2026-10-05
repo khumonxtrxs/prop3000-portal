@@ -4,7 +4,7 @@ import { Banknote, Briefcase, Gavel, Loader2, TrendingUp } from "lucide-react";
 import { CountBars, MoneyBars, StatusPie, TrendChart } from "@/components/portal/Charts";
 import { Empty, Panel, PortalShell, StatCard } from "@/components/portal/PortalShell";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+import { allRows } from "@/integrations/firebase/db";
 import { countBy, monthlySeries } from "@/lib/portal";
 import { money, prettyStatus } from "@/lib/prop3000";
 
@@ -33,21 +33,13 @@ function OwnerDashboard() {
     enabled: isOffice,
     queryFn: async () => {
       const [jobs, requests, properties, offers, listings] = await Promise.all([
-        supabase.from("jobs").select("id, status, progress, quote_amount, created_at, service_types"),
-        supabase.from("service_requests").select("id, status, created_at, service_types"),
-        supabase.from("property_submissions").select("id, status, offer_amount, created_at"),
-        supabase.from("offers").select("id, status, amount, created_at"),
-        supabase.from("listings").select("id, status, price"),
+        allRows("jobs"),
+        allRows("service_requests"),
+        allRows("property_submissions"),
+        allRows("offers"),
+        allRows("listings"),
       ]);
-      const firstError = jobs.error ?? requests.error ?? properties.error ?? offers.error ?? listings.error;
-      if (firstError) throw firstError;
-      return {
-        jobs: jobs.data ?? [],
-        requests: requests.data ?? [],
-        properties: properties.data ?? [],
-        offers: offers.data ?? [],
-        listings: listings.data ?? [],
-      };
+      return { jobs, requests, properties, offers, listings };
     },
   });
 

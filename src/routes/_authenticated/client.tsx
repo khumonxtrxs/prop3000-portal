@@ -6,7 +6,7 @@ import { Empty, Panel, PortalShell, StatCard } from "@/components/portal/PortalS
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+import { markNotificationRead, rowsWhere, updateRow } from "@/integrations/firebase/db";
 import { money, prettyStatus, shortDate, whatsappLink } from "@/lib/prop3000";
 
 export const Route = createFileRoute("/_authenticated/client")({
@@ -38,26 +38,14 @@ function ClientDashboard() {
     queryFn: async () => {
       const uid = user!.uid;
       const [requests, properties, jobs, quotes, bookings, notifications] = await Promise.all([
-        supabase.from("service_requests").select("*").eq("client_id", uid).order("created_at", { ascending: false }),
-        supabase.from("property_submissions").select("*").eq("client_id", uid).order("created_at", { ascending: false }),
-        supabase.from("jobs").select("*").eq("client_id", uid).order("created_at", { ascending: false }),
-        supabase.from("quotes").select("*").eq("client_id", uid).order("created_at", { ascending: false }),
-        supabase.from("bookings").select("*").eq("client_id", uid).order("scheduled_date", { ascending: true }),
-        supabase
-          .from("notifications")
-          .select("*")
-          .eq("user_id", uid)
-          .order("created_at", { ascending: false })
-          .limit(10),
+        rowsWhere("service_requests", "client_id", uid),
+        rowsWhere("property_submissions", "client_id", uid),
+        rowsWhere("jobs", "client_id", uid),
+        rowsWhere("quotes", "client_id", uid),
+        rowsWhere("bookings", "client_id", uid, "scheduled_date", "asc"),
+        rowsWhere("notifications", "user_id", uid),
       ]);
-      return {
-        requests: requests.data ?? [],
-        properties: properties.data ?? [],
-        jobs: jobs.data ?? [],
-        quotes: quotes.data ?? [],
-        bookings: bookings.data ?? [],
-        notifications: notifications.data ?? [],
-      };
+      return { requests, properties, jobs, quotes, bookings, notifications: notifications.slice(0, 10) };
     },
   });
 
@@ -65,8 +53,7 @@ function ClientDashboard() {
 
   const decideQuote = useMutation({
     mutationFn: async (input: { id: string; status: "approved" | "declined" }) => {
-      const { error } = await supabase.from("quotes").update({ status: input.status }).eq("id", input.id);
-      if (error) throw error;
+      await updateRow("quotes", input.id, { status: input.status });
     },
     onSuccess: async (_res, input) => {
       toast.success(input.status === "approved" ? "Quote approved — the office will schedule the work." : "Quote declined.");
@@ -77,8 +64,7 @@ function ClientDashboard() {
 
   const markRead = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("notifications").update({ read: true }).eq("id", id);
-      if (error) throw error;
+      await markNotificationRead(id);
     },
     onSuccess: async () => {
       await refresh();

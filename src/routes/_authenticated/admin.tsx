@@ -9,7 +9,11 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+import { collection, doc, documentId, getDocs, query, where, writeBatch } from "firebase/firestore";
+import { firestore } from "@/integrations/firebase/client";
+import { COLLECTIONS } from "@/integrations/firebase/config";
+import { allRows, newReference, nowIso, updateRow } from "@/integrations/firebase/db";
+import type { AppRole } from "@/hooks/useAuth";
 import { countBy, monthlySeries } from "@/lib/portal";
 import { money, prettyStatus, shortDate } from "@/lib/prop3000";
 
@@ -46,21 +50,13 @@ function AdminDashboard() {
     enabled: isOffice,
     queryFn: async () => {
       const [requests, properties, jobs, bookings, quotes] = await Promise.all([
-        supabase.from("service_requests").select("*").order("created_at", { ascending: false }),
-        supabase.from("property_submissions").select("*").order("created_at", { ascending: false }),
-        supabase.from("jobs").select("*").order("created_at", { ascending: false }),
-        supabase.from("bookings").select("*").order("scheduled_date", { ascending: true }),
-        supabase.from("quotes").select("*").order("created_at", { ascending: false }),
+        allRows("service_requests"),
+        allRows("property_submissions"),
+        allRows("jobs"),
+        allRows("bookings", "scheduled_date", "asc"),
+        allRows("quotes"),
       ]);
-      const firstError = requests.error ?? properties.error ?? jobs.error ?? bookings.error ?? quotes.error;
-      if (firstError) throw firstError;
-      return {
-        requests: requests.data ?? [],
-        properties: properties.data ?? [],
-        jobs: jobs.data ?? [],
-        bookings: bookings.data ?? [],
-        quotes: quotes.data ?? [],
-      };
+      return { requests, properties, jobs, bookings, quotes };
     },
   });
 
@@ -68,19 +64,24 @@ function AdminDashboard() {
     queryKey: ["office-staff"],
     enabled: isOffice,
     queryFn: async () => {
-      const { data: roleRows, error } = await supabase
-        .from("user_roles")
-        .select("user_id, role")
-        .in("role", ["supervisor", "admin", "owner"]);
-      if (error) throw error;
-      const ids = [...new Set((roleRows ?? []).map((r) => r.user_id))];
+      // user_roles/{uid} holds { roles: [...] }; the document id is the user's uid.
+      const db = firestore();
+      const roleDocs = await getDocs(
+        query(collection(db, COLLECTIONS.userRoles), where("roles", "array-contains-any", ["supervisor", "admin", "owner"])),
+      );
+      const rolesByUser = new Map(roleDocs.docs.map((d) => [d.id, (d.data()["roles"] ?? []) as AppRole[]]));
+      const ids = [...rolesByUser.keys()];
       if (ids.length === 0) return [];
-      const { data: profiles } = await supabase.from("profiles").select("id, full_name, email").in("id", ids);
-      return (profiles ?? []).map((p) => ({
-        id: p.id,
-        name: p.full_name ?? p.email ?? "Team member",
-        roles: (roleRows ?? []).filter((r) => r.user_id === p.id).map((r) => r.role),
-      }));
+      // "in" takes at most 30 ids per query, far more than the office's staff list.
+      const profiles = await getDocs(query(collection(db, COLLECTIONS.profiles), where(documentId(), "in", ids.slice(0, 30))));
+      return profiles.docs.map((p) => {
+        const profile = p.data();
+        return {
+          id: p.id,
+          name: (profile["full_name"] as string | null) ?? (profile["email"] as string | null) ?? "Team member",
+          roles: rolesByUser.get(p.id) ?? [],
+        };
+      });
     },
   });
 
@@ -90,8 +91,7 @@ function AdminDashboard() {
 
   const setLeadStatus = useMutation({
     mutationFn: async (input: { id: string; status: string }) => {
-      const { error } = await supabase.from("service_requests").update({ status: input.status }).eq("id", input.id);
-      if (error) throw error;
+      await updateRow("service_requests", input.id, { status: input.status });
     },
     onSuccess: async () => {
       toast.success("Lead updated.");
@@ -105,9 +105,12 @@ function AdminDashboard() {
       const source = data.data?.requests.find((r) => r.id === lead.id);
       if (!source) throw new Error("Lead not found");
       const amount = Number(quoteAmount.replace(/\D/g, "")) || null;
-      const reference = `JOB-${Date.now().toString().slice(-6)}`;
-      const { error } = await supabase.from("jobs").insert({
-        reference,
+      const db = firestore();
+      const now = nowIso();
+      // One batch so the job is never created without the lead being marked converted, or vice versa.
+      const batch = writeBatch(db);
+      batch.set(doc(collection(db, COLLECTIONS.jobs)), {
+        reference: newReference("JOB"),
         service_request_id: source.id,
         client_id: source.client_id,
         client_name: source.full_name,
@@ -122,13 +125,14 @@ function AdminDashboard() {
         status: "approved",
         progress: 0,
         quote_amount: amount,
+        start_date: null,
+        target_end_date: null,
+        completed_at: null,
+        created_at: now,
+        updated_at: now,
       });
-      if (error) throw error;
-      const { error: leadError } = await supabase
-        .from("service_requests")
-        .update({ status: "converted" })
-        .eq("id", source.id);
-      if (leadError) throw leadError;
+      batch.update(doc(db, COLLECTIONS.serviceRequests, source.id), { status: "converted", updated_at: now });
+      await batch.commit();
     },
     onSuccess: async () => {
       toast.success("Job created and supervisor assigned.");
@@ -144,8 +148,7 @@ function AdminDashboard() {
     mutationFn: async (input: { id: string; status: string; offer?: number | null }) => {
       const patch: { status: string; offer_amount?: number | null } = { status: input.status };
       if (input.offer !== undefined) patch.offer_amount = input.offer;
-      const { error } = await supabase.from("property_submissions").update(patch).eq("id", input.id);
-      if (error) throw error;
+      await updateRow("property_submissions", input.id, patch);
     },
     onSuccess: async () => {
       toast.success("Cash-sale lead updated.");
@@ -161,8 +164,7 @@ function AdminDashboard() {
       const patch: { assigned_to?: string | null; status?: string } = {};
       if (input.assigned_to !== undefined) patch.assigned_to = input.assigned_to;
       if (input.status) patch.status = input.status;
-      const { error } = await supabase.from("bookings").update(patch).eq("id", input.id);
-      if (error) throw error;
+      await updateRow("bookings", input.id, patch);
     },
     onSuccess: async () => {
       toast.success("Booking updated.");

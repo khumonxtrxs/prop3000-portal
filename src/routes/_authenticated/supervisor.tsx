@@ -9,7 +9,11 @@ import { PhotoUpload } from "@/components/PhotoUpload";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+import { collection, doc, writeBatch } from "firebase/firestore";
+import { firestore } from "@/integrations/firebase/client";
+import { COLLECTIONS, SUBCOLLECTIONS } from "@/integrations/firebase/config";
+import { allRows, listRows, nowIso, rowsWhere, sortRows } from "@/integrations/firebase/db";
+import type { Tables } from "@/lib/db-types";
 import { countBy } from "@/lib/portal";
 import { JOB_STATUSES, money, prettyStatus, shortDate } from "@/lib/prop3000";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -40,64 +44,56 @@ function SupervisorDashboard() {
   const jobs = useQuery({
     queryKey: ["supervisor-jobs", user?.uid, isOffice],
     enabled: !!user?.uid && isStaff,
-    queryFn: async () => {
-      let query = supabase.from("jobs").select("*").order("created_at", { ascending: false });
-      if (!isOffice) query = query.eq("supervisor_id", user!.uid);
-      const { data, error } = await query;
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => (isOffice ? allRows("jobs") : rowsWhere("jobs", "supervisor_id", user!.uid)),
   });
 
+  // History lives under each job (jobs/{id}/status_history), so read it per visible job.
+  const jobIds = (jobs.data ?? []).map((j) => j.id);
   const history = useQuery({
-    queryKey: ["supervisor-history"],
-    enabled: isStaff,
+    queryKey: ["supervisor-history", jobIds],
+    enabled: isStaff && jobs.isSuccess,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("job_status_history")
-        .select("id, job_id, status, note, created_at")
-        .order("created_at", { ascending: false })
-        .limit(15);
-      if (error) throw error;
-      return data;
+      const db = firestore();
+      const perJob = await Promise.all(
+        jobIds.map((id) =>
+          listRows<Tables<"job_status_history">>(
+            collection(db, COLLECTIONS.jobs, id, SUBCOLLECTIONS.jobStatusHistory),
+          ),
+        ),
+      );
+      return sortRows(perJob.flat(), "created_at").slice(0, 15);
     },
   });
 
   const bookings = useQuery({
     queryKey: ["supervisor-bookings", user?.uid],
     enabled: !!user?.uid && isStaff,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("bookings")
-        .select("id, booking_type, full_name, address, scheduled_date, scheduled_time, status")
-        .eq("assigned_to", user!.uid)
-        .order("scheduled_date", { ascending: true });
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => rowsWhere("bookings", "assigned_to", user!.uid, "scheduled_date", "asc"),
   });
 
   const update = useMutation({
     mutationFn: async (input: { id: string; status?: string; progress?: number; note?: string }) => {
+      const db = firestore();
+      const now = nowIso();
+      const jobRef = doc(db, COLLECTIONS.jobs, input.id);
+      const batch = writeBatch(db);
       const patch: { status?: string; progress?: number; completed_at?: string | null } = {};
       if (input.status) {
         patch.status = input.status;
-        patch.completed_at = input.status === "complete" ? new Date().toISOString() : null;
+        patch.completed_at = input.status === "complete" ? now : null;
       }
       if (input.progress !== undefined) patch.progress = input.progress;
-      if (Object.keys(patch).length > 0) {
-        const { error } = await supabase.from("jobs").update(patch).eq("id", input.id);
-        if (error) throw error;
-      }
+      if (Object.keys(patch).length > 0) batch.update(jobRef, { ...patch, updated_at: now });
       if (input.status || input.note?.trim()) {
-        const { error } = await supabase.from("job_status_history").insert({
+        batch.set(doc(collection(jobRef, SUBCOLLECTIONS.jobStatusHistory)), {
           job_id: input.id,
           status: input.status ?? "note",
           note: input.note?.trim() || null,
           changed_by: user!.uid,
+          created_at: now,
         });
-        if (error) throw error;
       }
+      await batch.commit();
     },
     onSuccess: async () => {
       toast.success("Job updated — the office and client can see it now.");
@@ -113,14 +109,20 @@ function SupervisorDashboard() {
 
   const savePhotos = useMutation({
     mutationFn: async (input: { jobId: string; paths: string[] }) => {
-      const rows = input.paths.map((path) => ({
-        job_id: input.jobId,
-        storage_path: path,
-        stage: "progress",
-        uploaded_by: user!.uid,
-      }));
-      const { error } = await supabase.from("job_photos").insert(rows);
-      if (error) throw error;
+      const db = firestore();
+      const now = nowIso();
+      const batch = writeBatch(db);
+      for (const path of input.paths) {
+        batch.set(doc(collection(db, COLLECTIONS.jobs, input.jobId, SUBCOLLECTIONS.jobPhotos)), {
+          job_id: input.jobId,
+          storage_path: path,
+          caption: null,
+          stage: "progress",
+          uploaded_by: user!.uid,
+          created_at: now,
+        });
+      }
+      await batch.commit();
     },
     onSuccess: () => toast.success("Site photos attached to the job."),
     onError: (e: Error) => toast.error(e.message),

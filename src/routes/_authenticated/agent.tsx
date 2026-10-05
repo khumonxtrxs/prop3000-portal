@@ -9,7 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+import { collection, orderBy, query } from "firebase/firestore";
+import { firestore } from "@/integrations/firebase/client";
+import { COLLECTIONS } from "@/integrations/firebase/config";
+import { listRows, updateRow } from "@/integrations/firebase/db";
+import type { Tables } from "@/lib/db-types";
+import { decideOffer } from "@/lib/offers";
 import { money, prettyStatus, shortDate } from "@/lib/prop3000";
 import { StatusBadge } from "@/components/StatusBadge";
 
@@ -38,41 +43,33 @@ function AgentConsole() {
     queryKey: ["agent-offers"],
     enabled: isAgent,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("offers")
-        .select(
-          "id, reference, amount, status, counter_amount, message, agent_notes, client_name, client_email, client_phone, created_at, listings(title, address, price)",
-        )
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
+      const rows = await listRows<Tables<"offers">>(
+        query(collection(firestore(), COLLECTIONS.offers), orderBy("created_at", "desc")),
+      );
+      return rows.map((offer) => ({
+        ...offer,
+        listings: { title: offer.listing_title, address: offer.listing_address, price: offer.asking_price },
+      }));
     },
   });
 
   const listings = useQuery({
     queryKey: ["agent-listings"],
     enabled: isAgent,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("listings")
-        .select("id, reference, title, address, price, status, created_at")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () =>
+      listRows<Tables<"listings">>(query(collection(firestore(), COLLECTIONS.listings), orderBy("created_at", "desc"))),
   });
 
   const decide = useMutation({
     mutationFn: async (input: { id: string; status: string; counter?: number | null; note?: string }) => {
-      const { error } = await supabase
-        .from("offers")
-        .update({
-          status: input.status,
-          counter_amount: input.counter ?? null,
-          agent_notes: input.note?.trim() ? input.note.trim() : null,
-        })
-        .eq("id", input.id);
-      if (error) throw error;
+      const offer = offers.data?.find((o) => o.id === input.id);
+      if (!offer) throw new Error("Offer not found");
+      await decideOffer({
+        offer,
+        status: input.status,
+        counter: input.counter ?? null,
+        note: input.note?.trim() ? input.note.trim() : null,
+      });
     },
     onSuccess: async () => {
       toast.success("Offer updated — the client has been notified.");
@@ -86,8 +83,7 @@ function AgentConsole() {
 
   const setListingStatus = useMutation({
     mutationFn: async (input: { id: string; status: string }) => {
-      const { error } = await supabase.from("listings").update({ status: input.status }).eq("id", input.id);
-      if (error) throw error;
+      await updateRow("listings", input.id, { status: input.status });
     },
     onSuccess: async () => {
       toast.success("Listing updated.");

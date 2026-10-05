@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+import { submitListingOffer } from "@/lib/offers";
 import { getPublicListing } from "@/lib/listings.functions";
 import { COMPANY, money, prettyStatus } from "@/lib/prop3000";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -97,25 +97,22 @@ function ListingDetail() {
       return;
     }
     setBusy(true);
-    const { data, error } = await supabase
-      .from("offers")
-      .insert({
-        listing_id: listing!.id,
-        client_id: user!.uid,
-        client_name: user!.displayName || user!.email || "Client",
-        client_email: user!.email ?? "",
-        client_phone: phone.trim() || null,
-        amount: value,
-        message: message.trim() || null,
-      })
-      .select("reference")
-      .single();
-    setBusy(false);
-    if (error) {
-      toast.error(error.message);
+    try {
+      setSent(
+        await submitListingOffer({
+          listingId: listing!.id,
+          user: user!,
+          phone: phone.trim() || null,
+          amount: value,
+          message: message.trim() || null,
+        }),
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "We couldn't send that offer. Please try again.");
       return;
+    } finally {
+      setBusy(false);
     }
-    setSent(data.reference);
     toast.success("Offer submitted — the agent has been notified.");
   }
 

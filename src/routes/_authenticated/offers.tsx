@@ -4,7 +4,11 @@ import { Loader2, Phone, Mail, Gavel } from "lucide-react";
 import { SiteLayout } from "@/components/site/SiteLayout";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+import { collection, query, where } from "firebase/firestore";
+import { firestore } from "@/integrations/firebase/client";
+import { listRows, sortRows } from "@/integrations/firebase/db";
+import { COLLECTIONS } from "@/integrations/firebase/config";
+import type { Tables } from "@/lib/db-types";
 import { money, prettyStatus, whatsappLink } from "@/lib/prop3000";
 import { StatusBadge } from "@/components/StatusBadge";
 
@@ -37,15 +41,21 @@ function OffersPage() {
     queryKey: ["my-offers", user?.uid],
     enabled: !!user?.uid,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("offers")
-        .select(
-          "id, reference, amount, status, counter_amount, message, agent_notes, created_at, listing_id, listings(title, address, price, agent_name, agent_phone, agent_email)",
-        )
-        .eq("client_id", user!.uid)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
+      const rows = await listRows<Tables<"offers">>(
+        query(collection(firestore(), COLLECTIONS.offers), where("client_id", "==", user!.uid)),
+      );
+      // The listing details were copied onto the offer when it was made; present them as before.
+      return sortRows(rows, "created_at").map((offer) => ({
+        ...offer,
+        listings: {
+          title: offer.listing_title,
+          address: offer.listing_address,
+          price: offer.asking_price,
+          agent_name: offer.agent_name,
+          agent_phone: offer.agent_phone,
+          agent_email: offer.agent_email,
+        },
+      }));
     },
   });
 

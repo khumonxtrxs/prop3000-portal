@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { supabase } from "@/integrations/supabase/client";
+import { insertRow, newReference } from "@/integrations/firebase/db";
 import { CONDITIONS, PROPERTY_TYPES } from "@/lib/prop3000";
 
 export const Route = createFileRoute("/sell")({
@@ -52,13 +52,17 @@ function SellPage() {
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
-    const { data, error } = await supabase
-      .from("property_submissions")
-      .insert({
+    const ref = newReference("PS");
+    try {
+      await insertRow("property_submissions", {
+        reference: ref,
+        client_id: null,
         full_name: form.full_name.trim(),
         email: form.email.trim(),
         phone: form.phone.trim(),
         address: form.address.trim(),
+        latitude: null,
+        longitude: null,
         property_type: form.property_type,
         condition: form.condition,
         bedrooms: form.bedrooms ? Number(form.bedrooms) : null,
@@ -68,16 +72,19 @@ function SellPage() {
         reason_for_selling: form.reason_for_selling.trim() || null,
         description: form.description.trim() || null,
         photo_paths: photos,
-      })
-      .select("reference")
-      .single();
-    setBusy(false);
-    if (error) {
+        status: "new",
+        offer_amount: null,
+        offer_notes: null,
+        admin_notes: null,
+      });
+    } catch (error) {
       console.error(error);
       toast.error("We couldn't send that. Please try again.");
       return;
+    } finally {
+      setBusy(false);
     }
-    setReference(data.reference);
+    setReference(ref);
     toast.success("Property submitted");
   }
 
