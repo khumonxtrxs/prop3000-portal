@@ -82,6 +82,7 @@ function ClientDashboard() {
     },
     onSuccess: async () => {
       await refresh();
+      await queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
   });
 
