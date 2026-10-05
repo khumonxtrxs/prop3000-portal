@@ -18,9 +18,11 @@ import {
   doc,
   getDoc,
   getDocs,
+  query,
   setDoc,
   setLogLevel,
   updateDoc,
+  where,
 } from "firebase/firestore";
 
 setLogLevel("error");
@@ -100,6 +102,11 @@ before(async () => {
       title: "Quote ready",
       read: false,
     });
+    await setDoc(doc(seed, "quotes", "quote-1"), {
+      client_id: UID.client,
+      status: "sent",
+      total: 45000,
+    });
   });
 });
 
@@ -169,6 +176,30 @@ describe("clients", () => {
 
   it("cannot grant itself a role", async () => {
     await assertFails(setDoc(doc(db(UID.client), "user_roles", UID.client), { roles: ["admin"] }));
+  });
+
+  it("becomes a client on first sign-in, and nothing more", async () => {
+    await assertSucceeds(setDoc(doc(db("user-new-1"), "user_roles", "user-new-1"), { roles: ["client"] }));
+    await assertFails(setDoc(doc(db("user-new-2"), "user_roles", "user-new-2"), { roles: ["client", "admin"] }));
+    await assertFails(setDoc(doc(db("user-new-3"), "user_roles", "user-new-4"), { roles: ["client"] }));
+  });
+
+  it("accepts a quote without changing its amounts", async () => {
+    await assertFails(
+      updateDoc(doc(db(UID.client), "quotes", "quote-1"), { status: "approved", total: 1 }),
+    );
+    await assertSucceeds(
+      updateDoc(doc(db(UID.client), "quotes", "quote-1"), { status: "approved", updated_at: "2026-10-05T10:00:00Z" }),
+    );
+  });
+
+  it("can notify itself but nobody else", async () => {
+    await assertSucceeds(
+      addDoc(collection(db(UID.client), "notifications"), { user_id: UID.client, title: "Offer sent", read: false }),
+    );
+    await assertFails(
+      addDoc(collection(db(UID.client), "notifications"), { user_id: UID.otherClient, title: "Spam", read: false }),
+    );
   });
 });
 
@@ -266,9 +297,33 @@ describe("listings and offers", () => {
   it("stops an unrelated client reading someone else's offer", async () => {
     await assertFails(getDoc(doc(db(UID.otherClient), "offers", "offer-1")));
   });
+
+  it("stops a buyer approving their own offer", async () => {
+    await assertFails(updateDoc(doc(db(UID.client), "offers", "offer-1"), { status: "approved" }));
+  });
+
+  it("lets the agent tell the buyer about the decision", async () => {
+    await assertSucceeds(
+      addDoc(collection(db(UID.agent), "notifications"), { user_id: UID.client, title: "Offer approved", read: false }),
+    );
+  });
+
+  // The server-rendered listings page runs exactly this query over the REST API, signed out.
+  it("lets the public query published listings but not every listing", async () => {
+    await assertSucceeds(
+      getDocs(query(collection(db(null), "listings"), where("status", "in", ["published", "under_offer", "sold"]))),
+    );
+    await assertFails(getDocs(collection(db(null), "listings")));
+  });
 });
 
 describe("staff boundaries", () => {
+  it("lets the admin turn a lead into an approved job, but not a client", async () => {
+    const job = { client_id: UID.client, supervisor_id: UID.supervisor, status: "approved", progress: 0, title: "Paving" };
+    await assertSucceeds(addDoc(collection(db(UID.admin), "jobs"), job));
+    await assertFails(addDoc(collection(db(UID.client), "jobs"), job));
+  });
+
   it("lets the admin triage a lead", async () => {
     await assertSucceeds(
       updateDoc(doc(db(UID.admin), "service_requests", "sr-1"), { status: "contacted" }),

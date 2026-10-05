@@ -70,11 +70,16 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Roles are readable by their owner and by the office, and are only ever written by the
-    // seeding script through the Admin SDK, which bypasses these rules.
+    // Roles are readable by their owner and by the office. On first sign-in a user may create their
+    // own document as a plain client (what Supabase's handle_new_user() trigger did); nothing else.
+    // Staff roles are only ever written by the seeding script through the Admin SDK, which bypasses
+    // these rules.
     match /user_roles/{userId} {
       allow read: if signedIn() && (userId == uid() || isOffice());
-      allow write: if false;
+      allow create: if signedIn() && userId == uid()
+        && request.resource.data.keys().hasOnly(['roles'])
+        && request.resource.data.roles == ['client'];
+      allow update, delete: if false;
     }
 
     match /service_types/{docId} {
@@ -128,7 +133,8 @@ service cloud.firestore {
       allow read: if signedIn() && (
         owns(resource.data) || resource.data.supervisor_id == uid() || isOffice()
       );
-      allow create: if isOffice() && statusIn(['quoted']);
+      // The lead desk creates a job as "approved" when it converts an accepted lead.
+      allow create: if isOffice() && statusIn(['quoted', 'approved']);
       allow update: if signedIn()
         && (isOffice() || resource.data.supervisor_id == uid())
         && statusIn(['quoted', 'approved', 'in_progress', 'on_hold', 'complete', 'cancelled'])
@@ -156,11 +162,14 @@ service cloud.firestore {
 
     match /quotes/{quoteId} {
       allow read: if signedIn() && (owns(resource.data) || isStaff());
-      allow create: if isOffice() && statusIn(['draft', 'quoted']);
-      // A client may only accept or decline; everything else is the office's.
+      // Quote statuses are draft, sent, approved, declined and expired (see the old quotes table).
+      allow create: if isOffice() && statusIn(['draft', 'sent']);
+      // A client may only accept or decline, and may not touch the amounts while doing it.
       allow update: if signedIn() && (
         isOffice()
-        || (owns(resource.data) && statusIn(['approved', 'declined']))
+        || (owns(resource.data)
+          && statusIn(['approved', 'declined'])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updated_at']))
       );
       allow delete: if isOffice();
     }
@@ -168,7 +177,9 @@ service cloud.firestore {
     // --------------------------------------------------------------- listings
 
     match /listings/{listingId} {
-      allow read: if resource.data.status != 'draft' || isAgent();
+      // Written as a positive list (not "!= draft") so Firestore can prove that a public query
+      // for published / under_offer / sold listings never returns a draft.
+      allow read: if resource.data.status in ['published', 'under_offer', 'sold'] || isAgent();
       allow create, update: if isAgent()
         && statusIn(['draft', 'published', 'under_offer', 'sold']);
       allow delete: if isOffice();
@@ -185,8 +196,9 @@ service cloud.firestore {
         && statusIn(['pending'])
         && request.resource.data.amount is number
         && request.resource.data.amount > 0;
-      allow update: if signedIn()
-        && (owns(resource.data) || isAgent())
+      // Only agents decide on offers. (The Supabase policy also let the buyer update their own
+      // offer, which would have let them approve it themselves; no screen ever needed that.)
+      allow update: if isAgent()
         && statusIn(['pending', 'approved', 'declined', 'countered']);
       allow delete: if false;
 
@@ -201,11 +213,12 @@ service cloud.firestore {
 
     // ---------------------------------------------------------- notifications
 
-    // Anyone signed in may notify a counterparty, but only the recipient can read their feed
-    // or mark it read. The notification's body is written once and never edited.
+    // A user may notify themselves (e.g. "offer submitted") and staff may notify anyone (e.g. an
+    // agent's decision on an offer). Only the recipient can read their feed or mark it read, and
+    // the notification's text is written once and never edited.
     match /notifications/{notificationId} {
       allow read: if signedIn() && resource.data.user_id == uid();
-      allow create: if signedIn();
+      allow create: if signedIn() && (request.resource.data.user_id == uid() || isStaff());
       allow update: if signedIn()
         && resource.data.user_id == uid()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);

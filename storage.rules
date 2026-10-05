@@ -36,7 +36,8 @@ service firebase.storage {
         && request.resource.size < 10 * 1024 * 1024;
     }
 
-    match /lead-photos/{fileName} {
+    // Uploads land in dated subfolders, e.g. lead-photos/requests/2026/<uuid>.jpg.
+    match /lead-photos/{path=**} {
       allow create: if isAllowedImage();
       allow read: if isStaff();
       allow update: if false;
