@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { ImagePlus, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { ref, uploadBytes } from "firebase/storage";
+import { firebaseStorage } from "@/integrations/firebase/client";
 
 const MAX_FILES = 8;
 const MAX_SOURCE_BYTES = 15 * 1024 * 1024;
@@ -62,11 +63,16 @@ export function PhotoUpload({
         }
         const blob = await compress(file);
         const path = `${prefix}/${crypto.randomUUID()}.jpg`;
-        const { error } = await supabase.storage.from(bucket).upload(path, blob, { contentType: "image/jpeg" });
-        if (error) {
-          toast.error(`Upload failed for ${file.name}`);
-          continue;
-        }
+
+        const storageRef = ref(
+          firebaseStorage(),
+          `${bucket}/${path}`,
+        );
+
+        await uploadBytes(storageRef, blob, {
+          contentType: "image/jpeg",
+        });
+        
         added.push(path);
         addedPreviews[path] = URL.createObjectURL(blob);
       }

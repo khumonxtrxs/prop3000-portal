@@ -4,7 +4,16 @@ import { Loader2, Phone, Mail, Gavel } from "lucide-react";
 import { SiteLayout } from "@/components/site/SiteLayout";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  collection,
+  getDocs,
+  orderBy,
+  query,
+  where,
+} from "firebase/firestore";
+
+import { firestore } from "@/integrations/firebase/client";
+import { COLLECTIONS } from "@/integrations/firebase/config";
 import { money, prettyStatus, whatsappLink } from "@/lib/prop3000";
 
 export const Route = createFileRoute("/_authenticated/offers")({
@@ -31,20 +40,37 @@ const TONE: Record<string, string> = {
 
 function OffersPage() {
   const { user } = useAuth();
-
-  const { data, isLoading } = useQuery({
-    queryKey: ["my-offers", user?.id],
-    enabled: !!user?.id,
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ["my-offers", user?.uid],
+    enabled: !!user?.uid,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("offers")
-        .select(
-          "id, reference, amount, status, counter_amount, message, agent_notes, created_at, listing_id, listings(title, address, price, agent_name, agent_phone, agent_email)",
-        )
-        .eq("client_id", user!.id)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
+      const offersQuery = query(
+        collection(firestore(), COLLECTIONS.offers),
+        where("client_id", "==", user!.uid),
+        orderBy("created_at", "desc"),
+      );
+
+      const snapshot = await getDocs(offersQuery);
+
+      return snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Array<{
+        id: string;
+        reference: string;
+        listing_id: string;
+        listing_title: string;
+        listing_address: string;
+        asking_price: number;
+        amount: number;
+        status: string;
+        counter_amount: number | null;
+        message: string | null;
+        agent_notes: string | null;
+        agent_name: string | null;
+        agent_phone?: string | null;
+        agent_email?: string | null;
+      }>;
     },
   });
 
@@ -58,7 +84,13 @@ function OffersPage() {
           Every offer you've submitted, with its live status. Approved offers unlock the agent's direct contact details.
         </p>
 
-        {isLoading ? (
+        {isError ? (
+          <div className="mt-10 rounded-xl border border-destructive bg-card p-6">
+            <p className="text-destructive">
+              {error instanceof Error ? error.message : String(error)}
+            </p>
+          </div>
+        ) : isLoading ? (
           <Loader2 className="mt-10 size-6 animate-spin text-accent" />
         ) : !data || data.length === 0 ? (
           <div className="mt-10 rounded-xl border border-border bg-card p-10 text-center">
@@ -73,13 +105,12 @@ function OffersPage() {
               <li key={offer.id} className="rounded-xl border border-border bg-card p-6 shadow-panel">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <h2 className="text-display text-xl">{offer.listings?.title ?? "Listing"}</h2>
-                    <p className="text-sm text-muted-foreground">{offer.listings?.address}</p>
+                    <h2 className="text-display text-xl">{offer.listing_title ?? "Listing"}</h2>
+                    <p className="text-sm text-muted-foreground">{offer.listing_address}</p>
                   </div>
                   <span
-                    className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide ${
-                      TONE[offer.status] ?? "bg-secondary"
-                    }`}
+                    className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide ${TONE[offer.status] ?? "bg-secondary"
+                      }`}
                   >
                     {prettyStatus(offer.status)}
                   </span>
@@ -87,7 +118,7 @@ function OffersPage() {
 
                 <div className="mt-4 flex flex-wrap gap-6 text-sm">
                   <span>
-                    Asking: <strong>{money(Number(offer.listings?.price ?? 0))}</strong>
+                    Asking: <strong>{money(Number(offer.asking_price ?? 0))}</strong>
                   </span>
                   <span>
                     Your offer: <strong>{money(Number(offer.amount))}</strong>
@@ -105,19 +136,19 @@ function OffersPage() {
                 {offer.status === "approved" && (
                   <div className="mt-4 rounded-lg border border-accent/40 bg-accent/10 p-4">
                     <p className="text-sm font-semibold">
-                      Approved — deal with {offer.listings?.agent_name ?? "your Prop3000 agent"} directly:
+                      Approved — deal with {offer.agent_name ?? "your Prop3000 agent"} directly:
                     </p>
                     <div className="mt-2 flex flex-wrap gap-3">
-                      {offer.listings?.agent_phone && (
+                      {offer.agent_phone && (
                         <>
                           <Button asChild size="sm" variant="accent">
-                            <a href={`tel:${offer.listings?.agent_phone}`}>
-                              <Phone className="size-4" /> {offer.listings?.agent_phone}
+                            <a href={`tel:${offer.agent_phone}`}>
+                              <Phone className="size-4" /> {offer.agent_phone}
                             </a>
                           </Button>
                           <Button asChild size="sm" variant="outline">
                             <a
-                              href={whatsappLink(`Hi, about offer ${offer.reference} on ${offer.listings?.title ?? ""}`)}
+                              href={whatsappLink(`Hi, about offer ${offer.reference} on ${offer.listing_title ?? "Listing"}`)}
                               target="_blank"
                               rel="noreferrer"
                             >
@@ -126,10 +157,10 @@ function OffersPage() {
                           </Button>
                         </>
                       )}
-                      {offer.listings?.agent_email && (
+                      {offer.agent_email && (
                         <Button asChild size="sm" variant="outline">
-                          <a href={`mailto:${offer.listings?.agent_email}`}>
-                            <Mail className="size-4" /> {offer.listings?.agent_email}
+                          <a href={`mailto:${offer.agent_email}`}>
+                            <Mail className="size-4" /> {offer.agent_email}
                           </a>
                         </Button>
                       )}

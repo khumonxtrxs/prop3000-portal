@@ -9,7 +9,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  updateDoc,
+  type DocumentData,
+} from "firebase/firestore";
+
+import { firestore } from "@/integrations/firebase/client";
+import { COLLECTIONS } from "@/integrations/firebase/config";
 import { money, prettyStatus, shortDate } from "@/lib/prop3000";
 
 export const Route = createFileRoute("/_authenticated/agent")({
@@ -26,6 +36,35 @@ export const Route = createFileRoute("/_authenticated/agent")({
   component: AgentConsole,
 });
 
+// Firebase helper
+type FirestoreRow = DocumentData & {
+  id: string;
+};
+
+function timestampValue(value: unknown): number {
+  if (!value) return 0;
+
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "toMillis" in value &&
+    typeof (value as { toMillis?: unknown }).toMillis === "function"
+  ) {
+    return (value as { toMillis: () => number }).toMillis();
+  }
+
+  if (value instanceof Date) {
+    return value.getTime();
+  }
+
+  if (typeof value === "string" || typeof value === "number") {
+    const parsed = new Date(value).getTime();
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+
+  return 0;
+}
+
 function AgentConsole() {
   const { isAgent, loading } = useAuth();
   const queryClient = useQueryClient();
@@ -36,63 +75,149 @@ function AgentConsole() {
   const offers = useQuery({
     queryKey: ["agent-offers"],
     enabled: isAgent,
+
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("offers")
-        .select(
-          "id, reference, amount, status, counter_amount, message, agent_notes, client_name, client_email, client_phone, created_at, listings(title, address, price)",
-        )
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
+      const snapshot = await getDocs(
+        collection(firestore(), COLLECTIONS.offers),
+      );
+
+      const rows = await Promise.all(
+        snapshot.docs.map(async (offerDoc) => {
+          const offer = {
+            id: offerDoc.id,
+            ...offerDoc.data(),
+          } as FirestoreRow;
+
+          let listing: FirestoreRow | null = null;
+
+          const listingId = offer["listing_id"];
+
+          if (listingId) {
+            const listingSnapshot = await getDoc(
+              doc(
+                firestore(),
+                COLLECTIONS.listings,
+                String(listingId),
+              ),
+            );
+
+            if (listingSnapshot.exists()) {
+              listing = {
+                id: listingSnapshot.id,
+                ...listingSnapshot.data(),
+              };
+            }
+          }
+
+          return {
+            ...offer,
+            listing,
+          } as FirestoreRow & {
+            listing: FirestoreRow | null;
+          };
+        }),
+      );
+
+      rows.sort(
+        (a, b) =>
+          timestampValue(b["created_at"]) -
+          timestampValue(a["created_at"]),
+      );
+
+      return rows;
     },
   });
 
   const listings = useQuery({
     queryKey: ["agent-listings"],
     enabled: isAgent,
+
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("listings")
-        .select("id, reference, title, address, price, status, created_at")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
+      const snapshot = await getDocs(
+        collection(firestore(), COLLECTIONS.listings),
+      );
+
+      const rows = snapshot.docs.map((listingDoc) => ({
+        id: listingDoc.id,
+        ...listingDoc.data(),
+      })) as FirestoreRow[];
+
+      rows.sort(
+        (a, b) =>
+          timestampValue(b["created_at"]) -
+          timestampValue(a["created_at"]),
+      );
+
+      return rows;
     },
   });
 
   const decide = useMutation({
-    mutationFn: async (input: { id: string; status: string; counter?: number | null; note?: string }) => {
-      const { error } = await supabase
-        .from("offers")
-        .update({
+    mutationFn: async (input: {
+      id: string;
+      status: string;
+      counter?: number | null;
+      note?: string;
+    }) => {
+      await updateDoc(
+        doc(
+          firestore(),
+          COLLECTIONS.offers,
+          input.id,
+        ),
+        {
           status: input.status,
           counter_amount: input.counter ?? null,
-          agent_notes: input.note?.trim() ? input.note.trim() : null,
-        })
-        .eq("id", input.id);
-      if (error) throw error;
+          agent_notes: input.note?.trim()
+            ? input.note.trim()
+            : null,
+        },
+      );
     },
+
     onSuccess: async () => {
       toast.success("Offer updated — the client has been notified.");
+
       setCounterFor(null);
       setCounterAmount("");
       setNote("");
-      await queryClient.invalidateQueries({ queryKey: ["agent-offers"] });
+
+      await queryClient.invalidateQueries({
+        queryKey: ["agent-offers"],
+      });
     },
-    onError: (error: Error) => toast.error(error.message),
+
+    onError: (error: Error) =>
+      toast.error(error.message),
   });
 
   const setListingStatus = useMutation({
-    mutationFn: async (input: { id: string; status: string }) => {
-      const { error } = await supabase.from("listings").update({ status: input.status }).eq("id", input.id);
-      if (error) throw error;
+    mutationFn: async (input: {
+      id: string;
+      status: string;
+    }) => {
+      await updateDoc(
+        doc(
+          firestore(),
+          COLLECTIONS.listings,
+          input.id,
+        ),
+        {
+          status: input.status,
+        },
+      );
     },
+
     onSuccess: async () => {
       toast.success("Listing updated.");
-      await queryClient.invalidateQueries({ queryKey: ["agent-listings"] });
+
+      await queryClient.invalidateQueries({
+        queryKey: ["agent-listings"],
+      });
     },
-    onError: (error: Error) => toast.error(error.message),
+
+    onError: (error: Error) =>
+      toast.error(error.message),
   });
 
   if (loading) {
@@ -140,29 +265,33 @@ function AgentConsole() {
               <li key={offer.id} className="rounded-xl border border-border bg-card p-5 shadow-panel">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="text-display text-lg">{offer.listings?.title ?? "Listing"}</p>
-                    <p className="text-sm text-muted-foreground">{offer.listings?.address}</p>
+                    <p className="text-display text-lg">{offer.listing?.["title"] ?? "Listing"}</p>
+                    <p className="text-sm text-muted-foreground">{offer.listing?.["address"]}</p>
                   </div>
                   <span className="rounded-full bg-secondary px-3 py-1 text-xs font-bold uppercase">
-                    {prettyStatus(offer.status)}
+                    {prettyStatus(offer["status"])}
                   </span>
                 </div>
 
                 <div className="mt-3 flex flex-wrap gap-5 text-sm">
                   <span>
-                    Asking <strong>{money(Number(offer.listings?.price ?? 0))}</strong>
+                    Asking <strong>{money(Number(offer.listing?.["price"] ?? 0))}</strong>
                   </span>
                   <span>
-                    Offered <strong>{money(Number(offer.amount))}</strong>
+                    Offered <strong>{money(Number(offer["amount"]))}</strong>
                   </span>
-                  {offer.counter_amount ? <span className="text-brick">Counter {money(Number(offer.counter_amount))}</span> : null}
+                  {offer["counter_amount"] ? <span className="text-brick">Counter {money(Number(offer["counter_amount"]))}</span> : null}
                   <span className="text-muted-foreground">
-                    {offer.client_name} · {offer.client_phone ?? offer.client_email}
+                    {offer["client_name"]} · {offer["client_phone"] ?? offer["client_email"]}
                   </span>
-                  <span className="text-muted-foreground">{shortDate(offer.created_at)}</span>
+                  <span className="text-muted-foreground">{shortDate(offer["created_at"])}</span>
                 </div>
 
-                {offer.message && <p className="mt-2 text-sm text-muted-foreground">“{offer.message}”</p>}
+                {offer["message"] && (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    “{offer["message"]}”
+                  </p>
+                )}
 
                 {counterFor === offer.id ? (
                   <div className="mt-4 space-y-3 rounded-lg border border-border p-4">
@@ -205,7 +334,7 @@ function AgentConsole() {
                     <Button
                       size="sm"
                       variant="accent"
-                      disabled={decide.isPending || offer.status === "approved"}
+                      disabled={decide.isPending || offer["status"] === "approved"}
                       onClick={() => decide.mutate({ id: offer.id, status: "approved" })}
                     >
                       <Check className="size-4" /> Approve
@@ -216,7 +345,7 @@ function AgentConsole() {
                     <Button
                       size="sm"
                       variant="outline"
-                      disabled={decide.isPending || offer.status === "declined"}
+                      disabled={decide.isPending || offer["status"] === "declined"}
                       onClick={() => decide.mutate({ id: offer.id, status: "declined" })}
                     >
                       <X className="size-4" /> Decline
@@ -245,9 +374,9 @@ function AgentConsole() {
                 className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card p-4"
               >
                 <div>
-                  <p className="font-semibold">{row.title}</p>
+                  <p className="font-semibold">{row["title"]}</p>
                   <p className="text-sm text-muted-foreground">
-                    {row.address} · {money(Number(row.price))} · {row.reference}
+                    {row["address"]} · {money(Number(row["price"]))} · {row["reference"]}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -255,7 +384,7 @@ function AgentConsole() {
                     <Button
                       key={status}
                       size="sm"
-                      variant={row.status === status ? "accent" : "outline"}
+                      variant={row["status"] === status ? "accent" : "outline"}
                       disabled={setListingStatus.isPending}
                       onClick={() => setListingStatus.mutate({ id: row.id, status })}
                     >

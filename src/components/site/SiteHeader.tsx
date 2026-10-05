@@ -5,7 +5,6 @@ import { Menu, X, LayoutDashboard, LogOut } from "lucide-react";
 import logo from "@/assets/prop3000-logo.png";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-// import { supabase } from "@/integrations/supabase/client";
 import { signOut as firebaseSignOut } from "firebase/auth";
 import { firebaseAuth } from "@/integrations/firebase/client";
 import { COMPANY, whatsappLink } from "@/lib/prop3000";

@@ -4,7 +4,14 @@ import { Banknote, Briefcase, Gavel, Loader2, TrendingUp } from "lucide-react";
 import { CountBars, MoneyBars, StatusPie, TrendChart } from "@/components/portal/Charts";
 import { Empty, Panel, PortalShell, StatCard } from "@/components/portal/PortalShell";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+
+import {
+  collection,
+  getDocs,
+} from "firebase/firestore";
+
+import { firestore } from "@/integrations/firebase/client";
+import { COLLECTIONS } from "@/integrations/firebase/config";
 import { countBy, monthlySeries } from "@/lib/portal";
 import { money, prettyStatus } from "@/lib/prop3000";
 
@@ -25,28 +32,64 @@ export const Route = createFileRoute("/_authenticated/owner")({
   component: OwnerDashboard,
 });
 
+type DateLike =
+  | string
+  | Date
+  | {
+    toDate?: () => Date;
+    toMillis?: () => number;
+  };
+
+// Firestore helper
+type FirestoreRow = {
+  id: string;
+  created_at?: DateLike;
+  status?: string;
+  service_types?: string[];
+  [key: string]: unknown;
+};
+
+async function getCollectionRows(
+  collectionName: string,
+): Promise<FirestoreRow[]> {
+  const snapshot = await getDocs(
+    collection(firestore(), collectionName),
+  );
+
+  return snapshot.docs.map((snapshot) => ({
+    id: snapshot.id,
+    ...snapshot.data(),
+  }));
+}
+
 function OwnerDashboard() {
   const { isOffice, loading } = useAuth();
 
   const data = useQuery({
     queryKey: ["owner-analytics"],
     enabled: isOffice,
+
     queryFn: async () => {
-      const [jobs, requests, properties, offers, listings] = await Promise.all([
-        supabase.from("jobs").select("id, status, progress, quote_amount, created_at, service_types"),
-        supabase.from("service_requests").select("id, status, created_at, service_types"),
-        supabase.from("property_submissions").select("id, status, offer_amount, created_at"),
-        supabase.from("offers").select("id, status, amount, created_at"),
-        supabase.from("listings").select("id, status, price"),
+      const [
+        jobs,
+        requests,
+        properties,
+        offers,
+        listings,
+      ] = await Promise.all([
+        getCollectionRows(COLLECTIONS.jobs),
+        getCollectionRows(COLLECTIONS.serviceRequests),
+        getCollectionRows(COLLECTIONS.propertySubmissions),
+        getCollectionRows(COLLECTIONS.offers),
+        getCollectionRows(COLLECTIONS.listings),
       ]);
-      const firstError = jobs.error ?? requests.error ?? properties.error ?? offers.error ?? listings.error;
-      if (firstError) throw firstError;
+
       return {
-        jobs: jobs.data ?? [],
-        requests: requests.data ?? [],
-        properties: properties.data ?? [],
-        offers: offers.data ?? [],
-        listings: listings.data ?? [],
+        jobs,
+        requests,
+        properties,
+        offers,
+        listings,
       };
     },
   });
@@ -67,27 +110,59 @@ function OwnerDashboard() {
     );
   }
 
-  const rows = data.data!;
-  const quoted = rows.jobs.reduce((s, j) => s + Number(j.quote_amount ?? 0), 0);
+  if (data.isError) {
+    return (
+      <PortalShell
+        badge="Owner"
+        title="Business analytics"
+        subtitle="We couldn't load the analytics dashboard."
+      >
+        <p className="text-destructive">
+          {data.error instanceof Error
+            ? data.error.message
+            : String(data.error)}
+        </p>
+      </PortalShell>
+    );
+  }
+
+  if (!data.data) {
+    return (
+      <PortalShell
+        badge="Owner"
+        title="Business analytics"
+        subtitle="No analytics data was returned."
+      >
+        <Empty>No analytics data is available.</Empty>
+      </PortalShell>
+    );
+  }
+
+  const rows = data.data;
+  const quoted = rows.jobs.reduce((s, j) => s + Number(j["quote_amount"] ?? 0), 0);
   const won = rows.jobs
-    .filter((j) => j.status === "in_progress" || j.status === "complete")
-    .reduce((s, j) => s + Number(j.quote_amount ?? 0), 0);
-  const listingStock = rows.listings.reduce((s, l) => s + Number(l.price ?? 0), 0);
+    .filter((j) => j["status"] === "in_progress" || j["status"] === "complete")
+    .reduce((s, j) => s + Number(j["quote_amount"] ?? 0), 0);
+  const listingStock = rows.listings.reduce((s, l) => s + Number(l["price"] ?? 0), 0);
   const acquisitionSpend = rows.properties
-    .filter((p) => p.status === "purchased")
-    .reduce((s, p) => s + Number(p.offer_amount ?? 0), 0);
+    .filter((p) => p["status"] === "purchased")
+    .reduce((s, p) => s + Number(p["offer_amount"] ?? 0), 0);
   const conversion = rows.requests.length
-    ? Math.round((rows.requests.filter((r) => r.status === "converted").length / rows.requests.length) * 100)
+    ? Math.round((rows.requests.filter((r) => r["status"] === "converted").length / rows.requests.length) * 100)
     : 0;
 
   const tradeCounts = countBy(
-    rows.jobs.flatMap((j) => j.service_types ?? []),
+    rows.jobs.flatMap((j) =>
+      Array.isArray(j.service_types)
+        ? j.service_types.filter((t): t is string => typeof t === "string")
+        : [],
+    ),
     (t) => t,
   );
 
   const revenueByStatus = ["quoted", "approved", "in_progress", "complete"].map((status) => ({
     name: prettyStatus(status),
-    value: rows.jobs.filter((j) => j.status === status).reduce((s, j) => s + Number(j.quote_amount ?? 0), 0),
+    value: rows.jobs.filter((j) => j["status"] === status).reduce((s, j) => s + Number(j["quote_amount"] ?? 0), 0),
   }));
 
   return (
@@ -105,22 +180,36 @@ function OwnerDashboard() {
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
         <Panel title="Lead volume — last 6 months">
-          <TrendChart data={monthlySeries([...rows.requests, ...rows.properties])} label="Leads" />
+          <TrendChart
+            data={monthlySeries(
+              [
+                ...rows.requests,
+                ...rows.properties,
+              ].map((row) => ({
+                ...row,
+                created_at: row.created_at ?? "",
+              })),
+            )}
+            label="Leads"
+          />
         </Panel>
         <Panel title="Quoted value by job stage">
           <MoneyBars data={revenueByStatus} />
         </Panel>
         <Panel title="Jobs by status">
-          <StatusPie data={countBy(rows.jobs, (j) => j.status)} />
+          <StatusPie data={countBy(rows.jobs, (j) => j.status ?? "unknown")} />
         </Panel>
         <Panel title="Offers by status">
-          <StatusPie data={countBy(rows.offers, (o) => o.status)} />
+          <StatusPie data={countBy(rows.offers, (o) => o.status ?? "unknown")} />
         </Panel>
         <Panel title="Demand by trade">
           <CountBars data={tradeCounts} label="Jobs" />
         </Panel>
         <Panel title="Cash-sale pipeline stages">
-          <CountBars data={countBy(rows.properties, (p) => p.status)} label="Properties" />
+          <CountBars
+            data={countBy(rows.properties, (p) => p.status ?? "unknown")}
+            label="Properties"
+          />
         </Panel>
       </div>
     </PortalShell>

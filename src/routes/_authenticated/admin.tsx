@@ -8,7 +8,22 @@ import { Empty, Panel, PortalShell, StatCard, StatusPill } from "@/components/po
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  where,
+  type DocumentData,
+} from "firebase/firestore";
+
+import { firestore } from "@/integrations/firebase/client";
+import { COLLECTIONS } from "@/integrations/firebase/config";
 import { countBy, monthlySeries } from "@/lib/portal";
 import { money, prettyStatus, shortDate } from "@/lib/prop3000";
 
@@ -31,6 +46,48 @@ export const Route = createFileRoute("/_authenticated/admin")({
 
 const LEAD_ACTIONS = ["contacted", "quoted", "approved", "declined"] as const;
 
+// Firebase helper
+type FirestoreRow = DocumentData & {
+  id: string;
+};
+
+async function getCollectionRows(
+  collectionName: string,
+): Promise<FirestoreRow[]> {
+  const snapshot = await getDocs(
+    collection(firestore(), collectionName),
+  );
+
+  return snapshot.docs.map((snapshot) => ({
+    id: snapshot.id,
+    ...snapshot.data(),
+  }));
+}
+
+function timestampValue(value: unknown): number {
+  if (!value) return 0;
+
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "toMillis" in value &&
+    typeof (value as { toMillis?: unknown }).toMillis === "function"
+  ) {
+    return (value as { toMillis: () => number }).toMillis();
+  }
+
+  if (value instanceof Date) {
+    return value.getTime();
+  }
+
+  if (typeof value === "string" || typeof value === "number") {
+    const parsed = new Date(value).getTime();
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+
+  return 0;
+}
+
 function AdminDashboard() {
   const { isOffice, loading } = useAuth();
   const queryClient = useQueryClient();
@@ -43,22 +100,58 @@ function AdminDashboard() {
   const data = useQuery({
     queryKey: ["office-desk"],
     enabled: isOffice,
+
     queryFn: async () => {
-      const [requests, properties, jobs, bookings, quotes] = await Promise.all([
-        supabase.from("service_requests").select("*").order("created_at", { ascending: false }),
-        supabase.from("property_submissions").select("*").order("created_at", { ascending: false }),
-        supabase.from("jobs").select("*").order("created_at", { ascending: false }),
-        supabase.from("bookings").select("*").order("scheduled_date", { ascending: true }),
-        supabase.from("quotes").select("*").order("created_at", { ascending: false }),
+      const [
+        requests,
+        properties,
+        jobs,
+        bookings,
+        quotes,
+      ] = await Promise.all([
+        getCollectionRows(COLLECTIONS.serviceRequests),
+        getCollectionRows(COLLECTIONS.propertySubmissions),
+        getCollectionRows(COLLECTIONS.jobs),
+        getCollectionRows(COLLECTIONS.bookings),
+        getCollectionRows(COLLECTIONS.quotes),
       ]);
-      const firstError = requests.error ?? properties.error ?? jobs.error ?? bookings.error ?? quotes.error;
-      if (firstError) throw firstError;
+
+      requests.sort(
+        (a, b) =>
+          timestampValue(b["created_at"]) -
+          timestampValue(a["created_at"]),
+      );
+
+      properties.sort(
+        (a, b) =>
+          timestampValue(b["created_at"]) -
+          timestampValue(a["created_at"]),
+      );
+
+      jobs.sort(
+        (a, b) =>
+          timestampValue(b["created_at"]) -
+          timestampValue(a["created_at"]),
+      );
+
+      quotes.sort(
+        (a, b) =>
+          timestampValue(b["created_at"]) -
+          timestampValue(a["created_at"]),
+      );
+
+      bookings.sort((a, b) =>
+        String(a["scheduled_date"] ?? "").localeCompare(
+          String(b["scheduled_date"] ?? ""),
+        ),
+      );
+
       return {
-        requests: requests.data ?? [],
-        properties: properties.data ?? [],
-        jobs: jobs.data ?? [],
-        bookings: bookings.data ?? [],
-        quotes: quotes.data ?? [],
+        requests,
+        properties,
+        jobs,
+        bookings,
+        quotes,
       };
     },
   });
@@ -66,20 +159,40 @@ function AdminDashboard() {
   const staff = useQuery({
     queryKey: ["office-staff"],
     enabled: isOffice,
+
     queryFn: async () => {
-      const { data: roleRows, error } = await supabase
-        .from("user_roles")
-        .select("user_id, role")
-        .in("role", ["supervisor", "admin", "owner"]);
-      if (error) throw error;
-      const ids = [...new Set((roleRows ?? []).map((r) => r.user_id))];
-      if (ids.length === 0) return [];
-      const { data: profiles } = await supabase.from("profiles").select("id, full_name, email").in("id", ids);
-      return (profiles ?? []).map((p) => ({
-        id: p.id,
-        name: p.full_name ?? p.email ?? "Team member",
-        roles: (roleRows ?? []).filter((r) => r.user_id === p.id).map((r) => r.role),
-      }));
+      const rolesSnapshot = await getDocs(
+        query(
+          collection(firestore(), COLLECTIONS.userRoles),
+          where("role", "in", ["supervisor", "admin", "owner"]),
+        ),
+      );
+
+      const staffRows = await Promise.all(
+        rolesSnapshot.docs.map(async (roleDoc) => {
+          const uid = roleDoc.id;
+          const role = roleDoc.data()["role"];
+
+          const profileSnapshot = await getDoc(
+            doc(firestore(), COLLECTIONS.profiles, uid),
+          );
+
+          const profile = profileSnapshot.exists()
+            ? profileSnapshot.data()
+            : null;
+
+          return {
+            id: uid,
+            name:
+              profile?.["full_name"] ??
+              profile?.["email"] ??
+              "Team member",
+            roles: [role],
+          };
+        }),
+      );
+
+      return staffRows;
     },
   });
 
@@ -88,100 +201,204 @@ function AdminDashboard() {
   };
 
   const setLeadStatus = useMutation({
-    mutationFn: async (input: { id: string; status: string }) => {
-      const { error } = await supabase.from("service_requests").update({ status: input.status }).eq("id", input.id);
-      if (error) throw error;
+    mutationFn: async (input: {
+      id: string;
+      status: string;
+    }) => {
+      await updateDoc(
+        doc(
+          firestore(),
+          COLLECTIONS.serviceRequests,
+          input.id,
+        ),
+        {
+          status: input.status,
+        },
+      );
     },
+
     onSuccess: async () => {
       toast.success("Lead updated.");
       await refresh();
     },
+
     onError: (e: Error) => toast.error(e.message),
   });
 
   const convertToJob = useMutation({
     mutationFn: async (lead: { id: string }) => {
-      const source = data.data?.requests.find((r) => r.id === lead.id);
-      if (!source) throw new Error("Lead not found");
-      const amount = Number(quoteAmount.replace(/\D/g, "")) || null;
-      const reference = `JOB-${Date.now().toString().slice(-6)}`;
-      const { error } = await supabase.from("jobs").insert({
+      const source = data.data?.requests.find(
+        (r) => r.id === lead.id,
+      );
+
+      if (!source) {
+        throw new Error("Lead not found");
+      }
+
+      const amount =
+        Number(quoteAmount.replace(/\D/g, "")) || null;
+
+      const jobRef = doc(
+        collection(firestore(), COLLECTIONS.jobs),
+      );
+
+      const reference = `JOB-${Date.now()
+        .toString()
+        .slice(-6)}`;
+
+      await setDoc(jobRef, {
         reference,
         service_request_id: source.id,
-        client_id: source.client_id,
-        client_name: source.full_name,
-        client_phone: source.phone,
-        title: `${source.service_types.map(prettyStatus).join(", ")} — ${source.full_name}`,
-        description: source.description,
-        address: source.address,
-        latitude: source.latitude,
-        longitude: source.longitude,
-        service_types: source.service_types,
+        client_id: source["client_id"] ?? null,
+        client_name: source["full_name"] ?? null,
+        client_phone: source["phone"] ?? null,
+
+        title: `${(
+          (source["service_types"] as string[]) ?? []
+        )
+          .map(prettyStatus)
+          .join(", ")} — ${source["full_name"] ?? "Client"}`,
+
+        description: source["description"] ?? null,
+        address: source["address"] ?? null,
+        latitude: source["latitude"] ?? null,
+        longitude: source["longitude"] ?? null,
+        service_types: source["service_types"] ?? [],
+
         supervisor_id: supervisorId || null,
         status: "approved",
         progress: 0,
         quote_amount: amount,
+
+        created_at: serverTimestamp(),
       });
-      if (error) throw error;
-      const { error: leadError } = await supabase
-        .from("service_requests")
-        .update({ status: "converted" })
-        .eq("id", source.id);
-      if (leadError) throw leadError;
+
+      await updateDoc(
+        doc(
+          firestore(),
+          COLLECTIONS.serviceRequests,
+          source.id,
+        ),
+        {
+          status: "converted",
+        },
+      );
     },
+
     onSuccess: async () => {
-      toast.success("Job created and supervisor assigned.");
+      toast.success(
+        "Job created and supervisor assigned.",
+      );
+
       setConvertFor(null);
       setQuoteAmount("");
       setSupervisorId("");
+
       await refresh();
     },
+
     onError: (e: Error) => toast.error(e.message),
   });
 
   const setPropertyStatus = useMutation({
-    mutationFn: async (input: { id: string; status: string; offer?: number | null }) => {
-      const patch: { status: string; offer_amount?: number | null } = { status: input.status };
-      if (input.offer !== undefined) patch.offer_amount = input.offer;
-      const { error } = await supabase.from("property_submissions").update(patch).eq("id", input.id);
-      if (error) throw error;
+    mutationFn: async (input: {
+      id: string;
+      status: string;
+      offer?: number | null;
+    }) => {
+      const patch: {
+        status: string;
+        offer_amount?: number | null;
+      } = {
+        status: input.status,
+      };
+
+      if (input.offer !== undefined) {
+        patch.offer_amount = input.offer;
+      }
+
+      await updateDoc(
+        doc(
+          firestore(),
+          COLLECTIONS.propertySubmissions,
+          input.id,
+        ),
+        patch,
+      );
     },
+
     onSuccess: async () => {
       toast.success("Cash-sale lead updated.");
       setOfferFor(null);
       setOfferAmount("");
       await refresh();
     },
+
     onError: (e: Error) => toast.error(e.message),
   });
 
   const assignBooking = useMutation({
-    mutationFn: async (input: { id: string; assigned_to?: string | null; status?: string }) => {
-      const patch: { assigned_to?: string | null; status?: string } = {};
-      if (input.assigned_to !== undefined) patch.assigned_to = input.assigned_to;
-      if (input.status) patch.status = input.status;
-      const { error } = await supabase.from("bookings").update(patch).eq("id", input.id);
-      if (error) throw error;
+    mutationFn: async (input: {
+      id: string;
+      assigned_to?: string | null;
+      status?: string;
+    }) => {
+      const patch: {
+        assigned_to?: string | null;
+        status?: string;
+      } = {};
+
+      if (input.assigned_to !== undefined) {
+        patch.assigned_to = input.assigned_to;
+      }
+
+      if (input.status) {
+        patch.status = input.status;
+      }
+
+      await updateDoc(
+        doc(
+          firestore(),
+          COLLECTIONS.bookings,
+          input.id,
+        ),
+        patch,
+      );
     },
+
     onSuccess: async () => {
       toast.success("Booking updated.");
       await refresh();
     },
+
     onError: (e: Error) => toast.error(e.message),
   });
 
   const charts = useMemo(() => {
     const rows = data.data;
     return {
-      leadStatus: countBy(rows?.requests ?? [], (r) => r.status),
-      jobStatus: countBy(rows?.jobs ?? [], (j) => j.status),
-      trend: monthlySeries([...(rows?.requests ?? []), ...(rows?.properties ?? [])]),
+      leadStatus: countBy(rows?.requests ?? [], (r) => r["status"]),
+      jobStatus: countBy(rows?.jobs ?? [], (j) => j["status"]),
+      trend: monthlySeries([
+        ...(rows?.requests ?? []).map((row) => ({
+          ...row,
+          created_at: row["created_at"] ?? "",
+        })),
+        ...(rows?.properties ?? []).map((row) => ({
+          ...row,
+          created_at: row["created_at"] ?? "",
+        })),
+      ]),
     };
   }, [data.data]);
 
   if (loading || data.isLoading) {
     return (
-      <PortalShell badge="Office" title="Lead desk" subtitle="Loading the pipeline…">
+      <PortalShell
+        badge="Office"
+        title="Lead desk"
+        subtitle="Loading the pipeline…"
+      >
         <Loader2 className="mx-auto size-6 animate-spin text-accent" />
       </PortalShell>
     );
@@ -189,16 +406,50 @@ function AdminDashboard() {
 
   if (!isOffice) {
     return (
-      <PortalShell badge="Office" title="Admins only" subtitle="This desk belongs to office staff and the owner.">
-        <Empty>Your account doesn't have office access. Ask an admin to grant it.</Empty>
+      <PortalShell
+        badge="Office"
+        title="Admins only"
+        subtitle="This desk belongs to office staff and the owner."
+      >
+        <Empty>
+          Your account doesn't have office access. Ask an admin to grant it.
+        </Empty>
       </PortalShell>
     );
   }
 
-  const rows = data.data!;
-  const openLeads = rows.requests.filter((r) => r.status !== "converted" && r.status !== "declined").length;
-  const activeJobs = rows.jobs.filter((j) => j.status === "in_progress" || j.status === "approved").length;
-  const quoted = rows.jobs.reduce((sum, j) => sum + Number(j.quote_amount ?? 0), 0);
+  if (data.isError) {
+    return (
+      <PortalShell
+        badge="Office"
+        title="Lead desk"
+        subtitle="We couldn't load the office dashboard."
+      >
+        <p className="text-destructive">
+          {data.error instanceof Error
+            ? data.error.message
+            : String(data.error)}
+        </p>
+      </PortalShell>
+    );
+  }
+
+  if (!data.data) {
+    return (
+      <PortalShell
+        badge="Office"
+        title="Lead desk"
+        subtitle="No dashboard data was returned."
+      >
+        <Empty>No dashboard data is available.</Empty>
+      </PortalShell>
+    );
+  }
+
+  const rows = data.data;
+  const openLeads = rows.requests.filter((r) => r["status"] !== "converted" && r["status"] !== "declined").length;
+  const activeJobs = rows.jobs.filter((j) => j["status"] === "in_progress" || j["status"] === "approved").length;
+  const quoted = rows.jobs.reduce((sum, j) => sum + Number(j["quote_amount"] ?? 0), 0);
 
   return (
     <PortalShell
@@ -236,16 +487,16 @@ function AdminDashboard() {
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="font-semibold">
-                        {lead.full_name} · {lead.reference}
+                        {lead["full_name"]} · {lead["reference"]}
                       </p>
-                      <p className="text-sm text-muted-foreground">{lead.address}</p>
+                      <p className="text-sm text-muted-foreground">{lead["address"]}</p>
                       <p className="text-sm text-muted-foreground">
-                        {lead.service_types.map(prettyStatus).join(", ")} · {lead.budget_range ?? "budget TBC"} ·{" "}
-                        {shortDate(lead.created_at)}
+                        {lead["service_types"].map(prettyStatus).join(", ")} · {lead["budget_range"] ?? "budget TBC"} ·{" "}
+                        {shortDate(lead["created_at"])}
                       </p>
-                      <p className="mt-1 text-sm">{lead.description}</p>
+                      <p className="mt-1 text-sm">{lead["description"]}</p>
                     </div>
-                    <StatusPill status={lead.status} />
+                    <StatusPill status={lead["status"]} />
                   </div>
 
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -253,14 +504,14 @@ function AdminDashboard() {
                       <Button
                         key={status}
                         size="sm"
-                        variant={lead.status === status ? "accent" : "outline"}
+                        variant={lead["status"] === status ? "accent" : "outline"}
                         disabled={setLeadStatus.isPending}
                         onClick={() => setLeadStatus.mutate({ id: lead.id, status })}
                       >
                         {prettyStatus(status)}
                       </Button>
                     ))}
-                    {lead.status !== "converted" && (
+                    {lead["status"] !== "converted" && (
                       <Button size="sm" variant="brick" onClick={() => setConvertFor(lead.id)}>
                         <UserCheck className="size-4" /> Convert to job
                       </Button>
@@ -318,22 +569,22 @@ function AdminDashboard() {
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="font-semibold">
-                        {property.full_name} · {property.reference}
+                        {property["full_name"]} · {property["reference"]}
                       </p>
-                      <p className="text-sm text-muted-foreground">{property.address}</p>
+                      <p className="text-sm text-muted-foreground">{property["address"]}</p>
                       <p className="text-sm text-muted-foreground">
-                        {prettyStatus(property.property_type)} · {prettyStatus(property.condition)} · asking{" "}
-                        {money(property.asking_price)} · our offer {money(property.offer_amount)}
+                        {prettyStatus(property["property_type"])} · {prettyStatus(property["condition"])} · asking{" "}
+                        {money(property["asking_price"])} · our offer {money(property["offer_amount"])}
                       </p>
                     </div>
-                    <StatusPill status={property.status} />
+                    <StatusPill status={property["status"]} />
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {["reviewing", "viewing_booked", "accepted", "purchased", "declined"].map((status) => (
                       <Button
                         key={status}
                         size="sm"
-                        variant={property.status === status ? "accent" : "outline"}
+                        variant={property["status"] === status ? "accent" : "outline"}
                         disabled={setPropertyStatus.isPending}
                         onClick={() => setPropertyStatus.mutate({ id: property.id, status })}
                       >
@@ -387,17 +638,17 @@ function AdminDashboard() {
                 <li key={booking.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-4">
                   <div>
                     <p className="font-semibold">
-                      {prettyStatus(booking.booking_type)} · {shortDate(booking.scheduled_date)}{" "}
-                      {booking.scheduled_time.slice(0, 5)}
+                      {prettyStatus(booking["booking_type"])} · {shortDate(booking["scheduled_date"])}{" "}
+                      {booking["scheduled_time"].slice(0, 5)}
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      {booking.full_name} · {booking.phone} · {booking.address ?? "no address"}
+                      {booking["full_name"]} · {booking["phone"]} · {booking["address"] ?? "no address"}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <select
                       className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                      value={booking.assigned_to ?? ""}
+                      value={booking["assigned_to"] ?? ""}
                       onChange={(e) => assignBooking.mutate({ id: booking.id, assigned_to: e.target.value || null })}
                     >
                       <option value="">Unassigned</option>
@@ -409,7 +660,7 @@ function AdminDashboard() {
                     </select>
                     <Button
                       size="sm"
-                      variant={booking.status === "confirmed" ? "accent" : "outline"}
+                      variant={booking["status"] === "confirmed" ? "accent" : "outline"}
                       onClick={() => assignBooking.mutate({ id: booking.id, status: "confirmed" })}
                     >
                       <Check className="size-4" /> Confirm

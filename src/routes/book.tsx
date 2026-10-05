@@ -7,7 +7,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  collection,
+  doc,
+  serverTimestamp,
+  setDoc,
+} from "firebase/firestore";
+
+import { firestore } from "@/integrations/firebase/client";
+import { COLLECTIONS } from "@/integrations/firebase/config";
+
 import { BOOKING_TYPES, TIME_SLOTS } from "@/lib/prop3000";
 
 export const Route = createFileRoute("/book")({
@@ -27,6 +37,7 @@ export const Route = createFileRoute("/book")({
 
 function BookPage() {
   const today = new Date().toISOString().slice(0, 10);
+  const { user } = useAuth();
   const [form, setForm] = useState({
     full_name: "",
     email: "",
@@ -46,14 +57,21 @@ function BookPage() {
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+
     if (!form.scheduled_date) {
       toast.error("Choose a date for your booking.");
       return;
     }
+
     setBusy(true);
-    const { data, error } = await supabase
-      .from("bookings")
-      .insert({
+
+    try {
+      const bookingRef = doc(
+        collection(firestore(), COLLECTIONS.bookings),
+      );
+
+      await setDoc(bookingRef, {
+        reference: bookingRef.id,
         full_name: form.full_name.trim(),
         email: form.email.trim(),
         phone: form.phone.trim(),
@@ -62,17 +80,22 @@ function BookPage() {
         scheduled_date: form.scheduled_date,
         scheduled_time: form.scheduled_time,
         notes: form.notes.trim() || null,
-      })
-      .select("reference")
-      .single();
-    setBusy(false);
-    if (error) {
+
+        status: "requested",
+        client_id: user?.uid ?? null,
+        assigned_to: null,
+
+        created_at: serverTimestamp(),
+      });
+
+      setReference(bookingRef.id);
+      toast.success("Booking requested");
+    } catch (error) {
       console.error(error);
       toast.error("We couldn't book that slot. Please try again.");
-      return;
+    } finally {
+      setBusy(false);
     }
-    setReference(data.reference);
-    toast.success("Booking requested");
   }
 
   if (reference) {
