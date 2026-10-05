@@ -118,7 +118,12 @@ CI runs lint, the type check, the build and the rule tests on every pull request
 4. Use design tokens, never hex values, in components. Statuses go through `<StatusBadge>`, money through `money()`, dates through `shortDate()`, and contact details come from `COMPANY`.
 5. Open the pull request, get a review, let CI pass, then merge. Never force-push shared history.
 
+## Team
 
+| Member | Role |
+|---|---|
 | Khumo | Tech lead and reviewer — architecture, database, security model, design system |
+| Leah Joubert | Application developer — screens, portal dashboards, forms, listings, accessibility |
+| Kenan | Platform and quality — GitHub migration, CI/CD, hosting, seed data, Firebase migration, documentation |
 | Leah Joubert | Application developer — screens, portal dashboards, forms, listings, accessibility |
 | Kenan | Platform and quality — GitHub migration, CI/CD, hosting, seed data, Firebase migration, documentation |
