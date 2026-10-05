@@ -19,7 +19,7 @@ const PORTAL = [
 
 /** Small footer labels use on-navy-muted: on-navy-label fails WCAG AA contrast at 11–12px on deep navy. */
 function ColumnHeading({ children }: { children: string }) {
-  return <h3 className="text-label text-[11px] text-on-navy-muted">{children}</h3>;
+    return <h2 className="text-label text-[11px] text-on-navy-muted">{children}</h2>;
 }
 
 /** Deep-navy footer: wordmark and blurb, page links, contact details, portal links. */
