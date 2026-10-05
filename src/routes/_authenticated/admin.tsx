@@ -1,17 +1,16 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Banknote, Briefcase, CalendarDays, Check, Home, Loader2, UserCheck, X } from "lucide-react";
-import { CountBars, StatusPie, TrendChart } from "@/components/portal/Charts";
-import { Empty, Panel, PortalShell, StatCard } from "@/components/portal/PortalShell";
+import { Loader2 } from "lucide-react";
+import { Empty, PortalShell, StatCard } from "@/components/portal/PortalShell";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { countBy, monthlySeries } from "@/lib/portal";
 import { money, prettyStatus, shortDate } from "@/lib/prop3000";
+import { STATUS_BORDER_LEFT, statusTone } from "@/lib/status";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({
@@ -30,14 +29,22 @@ export const Route = createFileRoute("/_authenticated/admin")({
   component: AdminDashboard,
 });
 
-const LEAD_ACTIONS = ["contacted", "quoted", "approved", "declined"] as const;
+const LEAD_TOGGLES = ["contacted", "quoted", "declined"] as const;
+const SELECT_CLASS =
+  "h-11 rounded-sm border border-input bg-card px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+/** Date plus time, e.g. "12 Sep 2026 08:14". Dates still go through shortDate(). */
+function when(value: string) {
+  const time = new Date(value).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" });
+  return `${shortDate(value)} ${time}`;
+}
+
+type Draft = { supervisorId: string; amount: string };
 
 function AdminDashboard() {
-  const { isOffice, loading } = useAuth();
+  const { user, isOffice, loading } = useAuth();
   const queryClient = useQueryClient();
-  const [convertFor, setConvertFor] = useState<string | null>(null);
-  const [quoteAmount, setQuoteAmount] = useState("");
-  const [supervisorId, setSupervisorId] = useState("");
+  const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [offerFor, setOfferFor] = useState<string | null>(null);
   const [offerAmount, setOfferAmount] = useState("");
 
@@ -86,69 +93,98 @@ function AdminDashboard() {
 
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ["office-desk"] });
+    await queryClient.invalidateQueries({ queryKey: ["notifications"] });
   };
 
   const setLeadStatus = useMutation({
-    mutationFn: async (input: { id: string; status: string }) => {
+    mutationFn: async (input: { id: string; reference: string; status: string }) => {
       const { error } = await supabase.from("service_requests").update({ status: input.status }).eq("id", input.id);
       if (error) throw error;
     },
-    onSuccess: async () => {
-      toast.success("Lead updated.");
+    onSuccess: async (_res, input) => {
+      toast.success(`Lead ${input.reference} marked ${prettyStatus(input.status).toLowerCase()}.`);
       await refresh();
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
+  /** The four writes from S7: job, lead → converted, first history row, client notification. */
   const convertToJob = useMutation({
-    mutationFn: async (lead: { id: string }) => {
-      const source = data.data?.requests.find((r) => r.id === lead.id);
+    mutationFn: async (input: { leadId: string; supervisorId: string; amount: number | null }) => {
+      const source = data.data?.requests.find((r) => r.id === input.leadId);
       if (!source) throw new Error("Lead not found");
-      const amount = Number(quoteAmount.replace(/\D/g, "")) || null;
       const reference = `JOB-${Date.now().toString().slice(-6)}`;
-      const { error } = await supabase.from("jobs").insert({
-        reference,
-        service_request_id: source.id,
-        client_id: source.client_id,
-        client_name: source.full_name,
-        client_phone: source.phone,
-        title: `${source.service_types.map(prettyStatus).join(", ")} — ${source.full_name}`,
-        description: source.description,
-        address: source.address,
-        latitude: source.latitude,
-        longitude: source.longitude,
-        service_types: source.service_types,
-        supervisor_id: supervisorId || null,
-        status: "approved",
-        progress: 0,
-        quote_amount: amount,
-      });
+
+      const { data: job, error } = await supabase
+        .from("jobs")
+        .insert({
+          reference,
+          service_request_id: source.id,
+          client_id: source.client_id,
+          client_name: source.full_name,
+          client_phone: source.phone,
+          title: `${source.service_types.map(prettyStatus).join(", ")} — ${source.full_name}`,
+          description: source.description,
+          address: source.address,
+          latitude: source.latitude,
+          longitude: source.longitude,
+          service_types: source.service_types,
+          supervisor_id: input.supervisorId || null,
+          status: "quoted",
+          progress: 0,
+          quote_amount: input.amount,
+        })
+        .select("id, reference")
+        .single();
       if (error) throw error;
+
       const { error: leadError } = await supabase
         .from("service_requests")
         .update({ status: "converted" })
         .eq("id", source.id);
       if (leadError) throw leadError;
+
+      const { error: historyError } = await supabase
+        .from("job_status_history")
+        .insert({ job_id: job.id, status: "quoted", changed_by: user!.id });
+      if (historyError) throw historyError;
+
+      let clientNotified = false;
+      if (source.client_id) {
+        const { error: notifyError } = await supabase.from("notifications").insert({
+          user_id: source.client_id,
+          title: `Job ${job.reference} created`,
+          body: `Your request ${source.reference} is now a job${input.amount ? `, quoted at ${money(input.amount)}` : ""}.`,
+        });
+        clientNotified = !notifyError;
+      }
+      return { reference: job.reference, client: source.full_name, clientNotified };
     },
-    onSuccess: async () => {
-      toast.success("Job created and supervisor assigned.");
-      setConvertFor(null);
-      setQuoteAmount("");
-      setSupervisorId("");
+    onSuccess: async (result, input) => {
+      if (result.clientNotified) {
+        toast.success(`Job ${result.reference} created — ${result.client} notified.`);
+      } else {
+        toast.warning(`Job ${result.reference} created, but the client could not be notified in the portal.`);
+      }
+      setDrafts((current) => {
+        const next = { ...current };
+        delete next[input.leadId];
+        return next;
+      });
       await refresh();
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
   const setPropertyStatus = useMutation({
-    mutationFn: async (input: { id: string; status: string; offer?: number | null }) => {
+    mutationFn: async (input: { id: string; reference: string; status: string; offer?: number | null }) => {
       const patch: { status: string; offer_amount?: number | null } = { status: input.status };
       if (input.offer !== undefined) patch.offer_amount = input.offer;
       const { error } = await supabase.from("property_submissions").update(patch).eq("id", input.id);
       if (error) throw error;
     },
-    onSuccess: async () => {
-      toast.success("Cash-sale lead updated.");
+    onSuccess: async (_res, input) => {
+      toast.success(`${input.reference} marked ${prettyStatus(input.status).toLowerCase()}.`);
       setOfferFor(null);
       setOfferAmount("");
       await refresh();
@@ -156,7 +192,7 @@ function AdminDashboard() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const assignBooking = useMutation({
+  const updateBooking = useMutation({
     mutationFn: async (input: { id: string; assigned_to?: string | null; status?: string }) => {
       const patch: { assigned_to?: string | null; status?: string } = {};
       if (input.assigned_to !== undefined) patch.assigned_to = input.assigned_to;
@@ -164,271 +200,359 @@ function AdminDashboard() {
       const { error } = await supabase.from("bookings").update(patch).eq("id", input.id);
       if (error) throw error;
     },
-    onSuccess: async () => {
-      toast.success("Booking updated.");
+    onSuccess: async (_res, input) => {
+      toast.success(input.status ? `Booking marked ${input.status}.` : "Booking assigned.");
       await refresh();
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const charts = useMemo(() => {
-    const rows = data.data;
-    return {
-      leadStatus: countBy(rows?.requests ?? [], (r) => r.status),
-      jobStatus: countBy(rows?.jobs ?? [], (j) => j.status),
-      trend: monthlySeries([...(rows?.requests ?? []), ...(rows?.properties ?? [])]),
-    };
-  }, [data.data]);
-
-  if (loading || data.isLoading) {
+  if (loading || (isOffice && data.isLoading)) {
     return (
-      <PortalShell badge="Office" title="Lead desk" subtitle="Loading the pipeline…">
-        <Loader2 className="mx-auto size-6 animate-spin text-accent" />
+      <PortalShell title="Lead triage" subtitle="Loading the pipeline…">
+        <Loader2 className="mx-auto size-6 animate-spin text-accent" aria-label="Loading" />
       </PortalShell>
     );
   }
 
-  if (!isOffice) {
+  if (!isOffice || !data.data) {
     return (
-      <PortalShell badge="Office" title="Admins only" subtitle="This desk belongs to office staff and the owner.">
+      <PortalShell title="Admins only" subtitle="This desk belongs to office staff and the owner.">
         <Empty>Your account doesn't have office access. Ask an admin to grant it.</Empty>
       </PortalShell>
     );
   }
 
-  const rows = data.data!;
-  const openLeads = rows.requests.filter((r) => r.status !== "converted" && r.status !== "declined").length;
+  const rows = data.data;
+  const people = staff.data ?? [];
+  const supervisors = people.filter((p) => p.roles.includes("supervisor"));
+  const assignable = supervisors.length > 0 ? supervisors : people;
+  const defaultSupervisor = assignable[0]?.id ?? "";
+  const draftFor = (id: string): Draft => drafts[id] ?? { supervisorId: defaultSupervisor, amount: "" };
+  const setDraft = (id: string, patch: Partial<Draft>) =>
+    setDrafts((current) => ({ ...current, [id]: { ...draftFor(id), ...patch } }));
+
+  const newLeads = rows.requests.filter((r) => r.status === "new").length;
+  const quotesWaiting = rows.quotes.filter((q) => q.status === "sent").length;
   const activeJobs = rows.jobs.filter((j) => j.status === "in_progress" || j.status === "approved").length;
-  const quoted = rows.jobs.reduce((sum, j) => sum + Number(j.quote_amount ?? 0), 0);
+  const toConfirm = rows.bookings.filter((b) => b.status === "requested").length;
+  const nameFor = (id: string | null) => people.find((p) => p.id === id)?.name ?? "Unassigned";
 
   return (
     <PortalShell
-      badge="Admin / office staff"
-      title="Lead desk"
-      subtitle="Triage every incoming renovation and cash-sale lead, convert leads into jobs with a supervisor, and run the booking diary."
+      title="Lead triage"
+      subtitle={`${newLeads} new service request${newLeads === 1 ? "" : "s"} waiting to be actioned.`}
     >
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard icon={Home} label="Open renovation leads" value={String(openLeads)} hint={`${rows.requests.length} total`} />
-        <StatCard icon={Banknote} label="Cash-sale leads" value={String(rows.properties.length)} />
-        <StatCard icon={Briefcase} label="Active jobs" value={String(activeJobs)} hint={`${rows.jobs.length} on file`} />
-        <StatCard icon={CalendarDays} label="Quoted value" value={money(quoted)} />
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))] gap-4">
+        <StatCard tone="accent" label="New leads" value={String(newLeads)} hint="awaiting first contact" />
+        <StatCard tone="primary" label="Quoted" value={String(quotesWaiting)} hint="waiting on the client" />
+        <StatCard tone="success" label="Active jobs" value={String(activeJobs)} hint="assigned to supervisors" />
+        <StatCard tone="brick" label="Bookings to confirm" value={String(toConfirm)} hint="requested, not yet confirmed" />
       </div>
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-3">
-        <Panel title="Lead intake trend">
-          <TrendChart data={charts.trend} label="Leads" />
-        </Panel>
-        <Panel title="Renovation leads by status">
-          <StatusPie data={charts.leadStatus} />
-        </Panel>
-        <Panel title="Jobs by status">
-          <CountBars data={charts.jobStatus} label="Jobs" />
-        </Panel>
-      </div>
-
-      <div className="mt-8 grid gap-6">
-        <Panel title="Renovation leads">
-          {rows.requests.length === 0 ? (
-            <Empty>No renovation requests yet.</Empty>
-          ) : (
-            <ul className="space-y-3">
-              {rows.requests.map((lead) => (
-                <li key={lead.id} className="rounded-lg border border-border p-4">
+      {/* Lead triage */}
+      <section aria-label="Renovation leads" className="mt-8">
+        {rows.requests.length === 0 ? (
+          <Empty>No renovation requests yet.</Empty>
+        ) : (
+          <ul className="space-y-4">
+            {rows.requests.map((lead) => {
+              const draft = draftFor(lead.id);
+              const converted = lead.status === "converted";
+              return (
+                <li
+                  key={lead.id}
+                  className={`rounded-sm border border-border border-l-4 bg-card p-6 ${STATUS_BORDER_LEFT[statusTone(lead.status)]}`}
+                >
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold">
-                        {lead.full_name} · {lead.reference}
+                    <div className="min-w-0">
+                      <p className="text-label text-[12px] text-ink-subtle">
+                        {lead.reference} · {when(lead.created_at)}
                       </p>
-                      <p className="text-sm text-muted-foreground">{lead.address}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {lead.service_types.map(prettyStatus).join(", ")} · {lead.budget_range ?? "budget TBC"} ·{" "}
-                        {shortDate(lead.created_at)}
+                      <h2 className="font-display mt-1 text-3xl font-bold uppercase leading-tight text-foreground">
+                        {lead.full_name}
+                      </h2>
+                      <p className="mt-1 text-muted-foreground">
+                        {lead.service_types.map(prettyStatus).join(", ")} · {lead.address}
                       </p>
-                      <p className="mt-1 text-sm">{lead.description}</p>
+                      <p className="mt-1 text-sm font-semibold text-muted-foreground">
+                        {lead.phone} · budget {lead.budget_range ?? "TBC"}
+                      </p>
                     </div>
                     <StatusBadge status={lead.status} />
                   </div>
 
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {LEAD_ACTIONS.map((status) => (
-                      <Button
-                        key={status}
-                        size="sm"
-                        variant={lead.status === status ? "accent" : "outline"}
-                        disabled={setLeadStatus.isPending}
-                        onClick={() => setLeadStatus.mutate({ id: lead.id, status })}
-                      >
-                        {prettyStatus(status)}
-                      </Button>
-                    ))}
-                    {lead.status !== "converted" && (
-                      <Button size="sm" variant="brick" onClick={() => setConvertFor(lead.id)}>
-                        <UserCheck className="size-4" /> Convert to job
-                      </Button>
-                    )}
-                  </div>
+                  {lead.description && <p className="mt-4 text-foreground">{lead.description}</p>}
 
-                  {convertFor === lead.id && (
-                    <div className="mt-3 grid gap-3 rounded-lg border border-border bg-secondary/40 p-4 sm:grid-cols-3">
-                      <Input
-                        inputMode="numeric"
-                        placeholder="Quote amount (R)"
-                        value={quoteAmount}
-                        onChange={(e) => setQuoteAmount(e.target.value)}
-                      />
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-divider pt-4">
+                    <div className="flex flex-wrap gap-2" role="group" aria-label={`Status for ${lead.reference}`}>
+                      {LEAD_TOGGLES.map((status) => (
+                        <Button
+                          key={status}
+                          variant={lead.status === status ? "default" : "outline"}
+                          aria-pressed={lead.status === status}
+                          className="font-display font-bold uppercase tracking-wide"
+                          disabled={setLeadStatus.isPending || converted}
+                          onClick={() => setLeadStatus.mutate({ id: lead.id, reference: lead.reference, status })}
+                        >
+                          {prettyStatus(status)}
+                        </Button>
+                      ))}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
                       <select
-                        className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-                        value={supervisorId}
-                        onChange={(e) => setSupervisorId(e.target.value)}
+                        aria-label={`Supervisor for ${lead.reference}`}
+                        className={SELECT_CLASS}
+                        value={draft.supervisorId}
+                        disabled={converted}
+                        onChange={(e) => setDraft(lead.id, { supervisorId: e.target.value })}
                       >
-                        <option value="">Assign supervisor…</option>
-                        {(staff.data ?? []).map((person) => (
+                        {assignable.map((person) => (
                           <option key={person.id} value={person.id}>
-                            {person.name} ({person.roles.join("/")})
+                            {person.name}
                           </option>
                         ))}
                       </select>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="accent"
-                          disabled={convertToJob.isPending}
-                          onClick={() => convertToJob.mutate({ id: lead.id })}
-                        >
-                          <Check className="size-4" /> Create job
-                        </Button>
-                        <Button size="sm" variant="outline" onClick={() => setConvertFor(null)}>
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-
-        <Panel title="Cash-sale pipeline">
-          {rows.properties.length === 0 ? (
-            <Empty>No property submissions yet.</Empty>
-          ) : (
-            <ul className="space-y-3">
-              {rows.properties.map((property) => (
-                <li key={property.id} className="rounded-lg border border-border p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold">
-                        {property.full_name} · {property.reference}
-                      </p>
-                      <p className="text-sm text-muted-foreground">{property.address}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {prettyStatus(property.property_type)} · {prettyStatus(property.condition)} · asking{" "}
-                        {money(property.asking_price)} · our offer {money(property.offer_amount)}
-                      </p>
-                    </div>
-                    <StatusBadge status={property.status} />
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {["reviewing", "viewing_booked", "accepted", "purchased", "declined"].map((status) => (
-                      <Button
-                        key={status}
-                        size="sm"
-                        variant={property.status === status ? "accent" : "outline"}
-                        disabled={setPropertyStatus.isPending}
-                        onClick={() => setPropertyStatus.mutate({ id: property.id, status })}
-                      >
-                        {prettyStatus(status)}
-                      </Button>
-                    ))}
-                    <Button size="sm" variant="brick" onClick={() => setOfferFor(property.id)}>
-                      Make cash offer
-                    </Button>
-                  </div>
-                  {offerFor === property.id && (
-                    <div className="mt-3 flex flex-wrap gap-2 rounded-lg border border-border bg-secondary/40 p-4">
                       <Input
-                        className="max-w-xs"
+                        aria-label={`Quote amount for ${lead.reference}`}
+                        className="h-11 w-44"
                         inputMode="numeric"
-                        placeholder="Offer amount (R)"
-                        value={offerAmount}
-                        onChange={(e) => setOfferAmount(e.target.value)}
+                        placeholder="Quote amount"
+                        value={draft.amount}
+                        disabled={converted}
+                        onChange={(e) => setDraft(lead.id, { amount: e.target.value })}
                       />
                       <Button
-                        size="sm"
-                        variant="accent"
-                        disabled={setPropertyStatus.isPending}
+                        className="font-display h-11 font-bold uppercase tracking-wide"
+                        disabled={convertToJob.isPending || converted}
                         onClick={() =>
-                          setPropertyStatus.mutate({
-                            id: property.id,
-                            status: "offer_made",
-                            offer: Number(offerAmount.replace(/\D/g, "")) || null,
+                          convertToJob.mutate({
+                            leadId: lead.id,
+                            supervisorId: draft.supervisorId,
+                            amount: Number(draft.amount.replace(/\D/g, "")) || null,
                           })
                         }
                       >
-                        Send offer
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => setOfferFor(null)}>
-                        Cancel
+                        {converted ? "Converted" : "Convert to job"}
                       </Button>
                     </div>
-                  )}
+                  </div>
                 </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
+              );
+            })}
+          </ul>
+        )}
+      </section>
 
-        <Panel title="Booking diary">
-          {rows.bookings.length === 0 ? (
+      {/* Property submissions */}
+      <section aria-labelledby="properties-heading" className="mt-10">
+        <h2 id="properties-heading" className="text-display text-3xl uppercase text-foreground">
+          Property submissions
+        </h2>
+        {rows.properties.length === 0 ? (
+          <div className="mt-4">
+            <Empty>No property submissions yet.</Empty>
+          </div>
+        ) : (
+          <ul className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(min(100%,340px),1fr))] gap-4">
+            {rows.properties.map((property) => (
+              <li key={property.id} className="rounded-sm border border-border bg-card p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-label text-[12px] text-ink-subtle">{property.reference}</p>
+                    <h3 className="font-display mt-1 text-2xl font-bold uppercase leading-tight text-foreground">
+                      {property.address}
+                    </h3>
+                  </div>
+                  <StatusBadge status={property.status} />
+                </div>
+                <p className="mt-1 text-muted-foreground">
+                  {prettyStatus(property.property_type)} · {prettyStatus(property.condition)}
+                </p>
+                <p className="mt-2 text-sm font-semibold text-muted-foreground">
+                  Asking {money(property.asking_price)} · {property.full_name}
+                  {property.offer_amount ? ` · our offer ${money(property.offer_amount)}` : ""}
+                </p>
+
+                <div className="mt-4 flex flex-wrap gap-2 border-t border-divider pt-4">
+                  <Button
+                    variant="brick"
+                    className="font-display font-bold uppercase tracking-wide"
+                    onClick={() => setOfferFor(offerFor === property.id ? null : property.id)}
+                    aria-expanded={offerFor === property.id}
+                  >
+                    Make cash offer
+                  </Button>
+                  <Button
+                    variant="outlineNavy"
+                    className="font-display font-bold uppercase tracking-wide"
+                    disabled={setPropertyStatus.isPending || property.status === "viewing_booked"}
+                    onClick={() =>
+                      setPropertyStatus.mutate({ id: property.id, reference: property.reference, status: "viewing_booked" })
+                    }
+                  >
+                    Book viewing
+                  </Button>
+                </div>
+
+                {offerFor === property.id && (
+                  <div className="mt-3 flex flex-wrap gap-2 rounded-sm bg-secondary p-3">
+                    <Input
+                      aria-label={`Cash offer for ${property.reference}`}
+                      className="max-w-[12rem]"
+                      inputMode="numeric"
+                      placeholder="Offer amount (R)"
+                      value={offerAmount}
+                      onChange={(e) => setOfferAmount(e.target.value)}
+                    />
+                    <Button
+                      className="font-display font-bold uppercase tracking-wide"
+                      disabled={setPropertyStatus.isPending}
+                      onClick={() =>
+                        setPropertyStatus.mutate({
+                          id: property.id,
+                          reference: property.reference,
+                          status: "offer_made",
+                          offer: Number(offerAmount.replace(/\D/g, "")) || null,
+                        })
+                      }
+                    >
+                      Send offer
+                    </Button>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* Jobs (target of the JOBS tab) */}
+      <section id="jobs" aria-labelledby="jobs-heading" className="mt-10 scroll-mt-6">
+        <h2 id="jobs-heading" className="text-display text-3xl uppercase text-foreground">
+          Jobs
+        </h2>
+        {rows.jobs.length === 0 ? (
+          <div className="mt-4">
+            <Empty>No jobs yet. Convert a lead to create one.</Empty>
+          </div>
+        ) : (
+          <ul className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(min(100%,340px),1fr))] gap-4">
+            {rows.jobs.map((job) => (
+              <li
+                key={job.id}
+                className={`rounded-sm border border-border border-t-4 bg-card p-5 ${
+                  {
+                    wait: "border-t-status-wait-foreground",
+                    motion: "border-t-status-motion-foreground",
+                    good: "border-t-status-good-foreground",
+                    bad: "border-t-status-bad-foreground",
+                    neutral: "border-t-status-neutral-foreground",
+                  }[statusTone(job.status)]
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-label text-[12px] text-ink-subtle">{job.reference}</p>
+                  <StatusBadge status={job.status} />
+                </div>
+                <h3 className="font-display mt-1 text-2xl font-bold uppercase leading-tight text-foreground">
+                  {job.title}
+                </h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {nameFor(job.supervisor_id)} · {money(job.quote_amount)}
+                </p>
+                <div
+                  className="mt-3 h-2 overflow-hidden rounded-sm bg-secondary"
+                  role="progressbar"
+                  aria-label={`${job.reference} progress`}
+                  aria-valuenow={job.progress}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                >
+                  <div className="h-full bg-accent" style={{ width: `${job.progress}%` }} />
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+            {/* Booking diary (target of the BOOKINGS tab) */}
+      <section id="bookings" aria-labelledby="bookings-heading" className="mt-10 scroll-mt-6">
+        <h2 id="bookings-heading" className="text-display text-3xl uppercase text-foreground">
+          Booking diary
+        </h2>
+        {rows.bookings.length === 0 ? (
+          <div className="mt-4">
             <Empty>No bookings yet.</Empty>
-          ) : (
-            <ul className="space-y-3">
-              {rows.bookings.map((booking) => (
-                <li key={booking.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-4">
-                  <div>
-                    <p className="font-semibold">
-                      {prettyStatus(booking.booking_type)} · {shortDate(booking.scheduled_date)}{" "}
-                      {booking.scheduled_time.slice(0, 5)}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {booking.full_name} · {booking.phone} · {booking.address ?? "no address"}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <select
-                      className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                      value={booking.assigned_to ?? ""}
-                      onChange={(e) => assignBooking.mutate({ id: booking.id, assigned_to: e.target.value || null })}
-                    >
-                      <option value="">Unassigned</option>
-                      {(staff.data ?? []).map((person) => (
-                        <option key={person.id} value={person.id}>
-                          {person.name}
-                        </option>
-                      ))}
-                    </select>
-                    <Button
-                      size="sm"
-                      variant={booking.status === "confirmed" ? "accent" : "outline"}
-                      onClick={() => assignBooking.mutate({ id: booking.id, status: "confirmed" })}
-                    >
-                      <Check className="size-4" /> Confirm
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => assignBooking.mutate({ id: booking.id, status: "cancelled" })}
-                    >
-                      <X className="size-4" /> Cancel
-                    </Button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-      </div>
+          </div>
+        ) : (
+          <div className="mt-4 overflow-x-auto rounded-sm border border-border bg-card">
+            <table className="w-full min-w-[960px] text-left">
+              <thead className="bg-primary text-primary-foreground">
+                <tr>
+                  {["Date · slot", "Type", "Client", "Address", "Status", "Action"].map((heading) => (
+                    <th key={heading} scope="col" className="text-label px-5 py-4 text-[12px]">
+                      {heading}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.bookings.map((booking) => (
+                  <tr key={booking.id} className="border-t border-border">
+                    <td className="font-display whitespace-nowrap px-5 py-4 text-xl font-bold">
+                      {shortDate(booking.scheduled_date)} · {booking.scheduled_time.slice(0, 5)}
+                    </td>
+                    <td className="px-5 py-4">{prettyStatus(booking.booking_type)}</td>
+                    <td className="px-5 py-4">{booking.full_name}</td>
+                    <td className="px-5 py-4 text-muted-foreground">{booking.address ?? "—"}</td>
+                    <td className="px-5 py-4">
+                      <StatusBadge status={booking.status} />
+                    </td>
+                    <td className="px-5 py-4">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="success"
+                          className="font-display font-bold uppercase"
+                          disabled={updateBooking.isPending || booking.status === "confirmed"}
+                          onClick={() => updateBooking.mutate({ id: booking.id, status: "confirmed" })}
+                        >
+                          Confirm
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outlineNavy"
+                          className="font-display font-bold uppercase"
+                          disabled={updateBooking.isPending || booking.status === "completed"}
+                          onClick={() => updateBooking.mutate({ id: booking.id, status: "completed" })}
+                        >
+                          Complete
+                        </Button>
+                        <select
+                          aria-label={`Assign booking for ${booking.full_name}`}
+                          className={`${SELECT_CLASS} h-9`}
+                          value={booking.assigned_to ?? ""}
+                          onChange={(e) => updateBooking.mutate({ id: booking.id, assigned_to: e.target.value || null })}
+                        >
+                          <option value="">Assign…</option>
+                          {people.map((person) => (
+                            <option key={person.id} value={person.id}>
+                              {person.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </PortalShell>
   );
 }
