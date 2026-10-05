@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { money, prettyStatus, shortDate } from "@/lib/prop3000";
+import { StatusBadge } from "@/components/StatusBadge";
 
 export const Route = createFileRoute("/_authenticated/agent")({
   head: () => ({
@@ -143,9 +144,7 @@ function AgentConsole() {
                     <p className="text-display text-lg">{offer.listings?.title ?? "Listing"}</p>
                     <p className="text-sm text-muted-foreground">{offer.listings?.address}</p>
                   </div>
-                  <span className="rounded-full bg-secondary px-3 py-1 text-xs font-bold uppercase">
-                    {prettyStatus(offer.status)}
-                  </span>
+                  <StatusBadge status={offer.status} />
                 </div>
 
                 <div className="mt-3 flex flex-wrap gap-5 text-sm">

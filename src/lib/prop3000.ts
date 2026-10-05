@@ -7,6 +7,8 @@ export const COMPANY = {
   officeDisplay: "021 705 1867",
   email: "info@prop3000.co.za",
   base: "Cape Town, South Africa",
+  officeHours: "Mon–Fri 08:00–17:00, Sat 08:00–13:00",
+  serviceArea: "Northern & Southern suburbs, Cape Flats, Helderberg",
   baseCoords: { lat: -34.0351, lng: 18.4839 },
 };
 

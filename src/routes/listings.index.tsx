@@ -8,7 +8,8 @@ import type { MapPin } from "@/components/MapCanvas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { listPublicListings } from "@/lib/listings.functions";
-import { COMPANY, money, prettyStatus } from "@/lib/prop3000";
+import { COMPANY, money } from "@/lib/prop3000";
+import { StatusBadge } from "@/components/StatusBadge";
 
 const listingsQuery = queryOptions({
   queryKey: ["public-listings"],
@@ -136,9 +137,7 @@ function ListingsPage() {
                   <div className="p-5">
                     <div className="flex items-start justify-between gap-3">
                       <h2 className="text-display text-xl leading-tight">{row.title}</h2>
-                      <span className="rounded-full bg-secondary px-2 py-1 text-xs font-semibold uppercase">
-                        {prettyStatus(row.status)}
-                      </span>
+                      <StatusBadge status={row.status} />
                     </div>
                     <p className="mt-1 flex items-start gap-1.5 text-sm text-muted-foreground">
                       <MapPinIcon className="mt-0.5 size-4 shrink-0 text-brick" />
