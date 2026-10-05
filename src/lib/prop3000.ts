@@ -17,11 +17,10 @@ export function whatsappLink(message: string) {
 }
 
 export const BUDGET_RANGES = [
-  "Under R25 000",
-  "R25 000 – R75 000",
-  "R75 000 – R150 000",
-  "R150 000 – R500 000",
-  "R500 000+",
+  "Under R20 000",
+  "R20 000 – R50 000",
+  "R50 000 – R150 000",
+  "R150 000+",
   "Not sure yet",
 ];
 
