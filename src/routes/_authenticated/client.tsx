@@ -33,10 +33,10 @@ function ClientDashboard() {
   const queryClient = useQueryClient();
 
   const data = useQuery({
-    queryKey: ["client-portal", user?.id],
-    enabled: !!user?.id,
+    queryKey: ["client-portal", user?.uid],
+    enabled: !!user?.uid,
     queryFn: async () => {
-      const uid = user!.id;
+      const uid = user!.uid;
       const [requests, properties, jobs, quotes, bookings, notifications] = await Promise.all([
         supabase.from("service_requests").select("*").eq("client_id", uid).order("created_at", { ascending: false }),
         supabase.from("property_submissions").select("*").eq("client_id", uid).order("created_at", { ascending: false }),

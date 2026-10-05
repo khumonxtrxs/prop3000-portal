@@ -38,11 +38,11 @@ function SupervisorDashboard() {
   const [note, setNote] = useState("");
 
   const jobs = useQuery({
-    queryKey: ["supervisor-jobs", user?.id, isOffice],
-    enabled: !!user?.id && isStaff,
+    queryKey: ["supervisor-jobs", user?.uid, isOffice],
+    enabled: !!user?.uid && isStaff,
     queryFn: async () => {
       let query = supabase.from("jobs").select("*").order("created_at", { ascending: false });
-      if (!isOffice) query = query.eq("supervisor_id", user!.id);
+      if (!isOffice) query = query.eq("supervisor_id", user!.uid);
       const { data, error } = await query;
       if (error) throw error;
       return data;
@@ -64,13 +64,13 @@ function SupervisorDashboard() {
   });
 
   const bookings = useQuery({
-    queryKey: ["supervisor-bookings", user?.id],
-    enabled: !!user?.id && isStaff,
+    queryKey: ["supervisor-bookings", user?.uid],
+    enabled: !!user?.uid && isStaff,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("bookings")
         .select("id, booking_type, full_name, address, scheduled_date, scheduled_time, status")
-        .eq("assigned_to", user!.id)
+        .eq("assigned_to", user!.uid)
         .order("scheduled_date", { ascending: true });
       if (error) throw error;
       return data;
@@ -94,7 +94,7 @@ function SupervisorDashboard() {
           job_id: input.id,
           status: input.status ?? "note",
           note: input.note?.trim() || null,
-          changed_by: user!.id,
+          changed_by: user!.uid,
         });
         if (error) throw error;
       }
@@ -117,7 +117,7 @@ function SupervisorDashboard() {
         job_id: input.jobId,
         storage_path: path,
         stage: "progress",
-        uploaded_by: user!.id,
+        uploaded_by: user!.uid,
       }));
       const { error } = await supabase.from("job_photos").insert(rows);
       if (error) throw error;

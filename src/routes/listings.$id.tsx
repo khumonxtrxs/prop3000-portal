@@ -61,7 +61,7 @@ export const Route = createFileRoute("/listings/$id")({
 function ListingDetail() {
   const { id } = Route.useParams();
   const { data: listing } = useSuspenseQuery(listingQuery(id));
-  const { session, user } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [amount, setAmount] = useState("");
   const [phone, setPhone] = useState("");
@@ -101,8 +101,8 @@ function ListingDetail() {
       .from("offers")
       .insert({
         listing_id: listing!.id,
-        client_id: user!.id,
-        client_name: (user!.user_metadata?.["full_name"] as string) || user!.email || "Client",
+        client_id: user!.uid,
+        client_name: user!.displayName || user!.email || "Client",
         client_email: user!.email ?? "",
         client_phone: phone.trim() || null,
         amount: value,
@@ -183,7 +183,7 @@ function ListingDetail() {
                     <Link to="/offers">Track my offers</Link>
                   </Button>
                 </div>
-              ) : session ? (
+              ) : user ? (
                 <form onSubmit={submitOffer} className="mt-4 space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="o_amount">Your offer (R)</Label>
