@@ -17,8 +17,9 @@ const PORTAL = [
   { to: "/sell", label: "Sell for cash" },
 ] as const;
 
+/** Small footer labels use on-navy-muted: on-navy-label fails WCAG AA contrast at 11–12px on deep navy. */
 function ColumnHeading({ children }: { children: string }) {
-  return <h3 className="text-label text-[11px] text-on-navy-label">{children}</h3>;
+    return <h2 className="text-label text-[11px] text-on-navy-muted">{children}</h2>;
 }
 
 /** Deep-navy footer: wordmark and blurb, page links, contact details, portal links. */
@@ -75,7 +76,7 @@ export function SiteFooter() {
                 {COMPANY.email}
               </a>
             </li>
-            <li className="text-on-navy-label">Mon–Fri 08:00–17:00 · Sat 08:00–13:00</li>
+            <li>{COMPANY.officeHours}</li>
           </ul>
         </div>
 
@@ -97,7 +98,7 @@ export function SiteFooter() {
       </div>
 
       <div className="border-t border-navy-hairline">
-        <div className="mx-auto flex max-w-[1240px] flex-wrap justify-between gap-2 px-5 py-4 text-xs text-on-navy-label">
+        <div className="mx-auto flex max-w-[1240px] flex-wrap justify-between gap-2 px-5 py-4 text-xs text-on-navy-muted">
           <span>© {new Date().getFullYear()} Prop3000 · Cape Town</span>
           <span>Portal by Blueprint Developers · INSY7315</span>
         </div>
