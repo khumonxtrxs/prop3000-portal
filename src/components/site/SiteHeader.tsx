@@ -5,7 +5,6 @@ import { Menu, X, LayoutDashboard, LogOut } from "lucide-react";
 import logo from "@/assets/prop3000-logo.png";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-// import { supabase } from "@/integrations/supabase/client";
 import { signOut as firebaseSignOut } from "firebase/auth";
 import { firebaseAuth } from "@/integrations/firebase/client";
 import { COMPANY, whatsappLink } from "@/lib/prop3000";
@@ -23,17 +22,9 @@ const NAV = [
 /** Sticky white header: logo left, uppercase nav centre, WhatsApp and sign-in right. */
 export function SiteHeader() {
   const [open, setOpen] = useState(false);
-  // const { session } = useAuth();
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-
-  // async function signOut() {
-  //   await queryClient.cancelQueries();
-  //   queryClient.clear();
-  //   await supabase.auth.signOut();
-  //   navigate({ to: "/auth", replace: true });
-  // }
 
   async function signOut() {
     await queryClient.cancelQueries();
@@ -69,7 +60,6 @@ export function SiteHeader() {
             </a>
           </Button>
 
-          {/* {session ? ( */}
           {user ? (
             <>
               <Button asChild variant="outlineNavy" size="sm" className="hidden md:inline-flex">
@@ -117,7 +107,6 @@ export function SiteHeader() {
                 Sell for cash
               </Link>
             </Button>
-            {/* {session ? ( */}
             {user ? (
               <>
                 <Button asChild variant="outlineNavy">

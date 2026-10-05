@@ -2,7 +2,11 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+import { signOut as firebaseSignOut } from "firebase/auth";
+import { collection, getCountFromServer, query, where } from "firebase/firestore";
+import { firebaseAuth, firestore } from "@/integrations/firebase/client";
+import { COLLECTIONS } from "@/integrations/firebase/config";
+import { rowsWhere } from "@/integrations/firebase/db";
 import { portalLinks, primaryRole } from "@/lib/portal";
 import { shortDate } from "@/lib/prop3000";
 
@@ -22,11 +26,10 @@ export function PortalShell({
   const queryClient = useQueryClient();
   const links = portalLinks(roles);
   const role = roles.length > 0 ? primaryRole(roles) : null;
-  const rawName = user?.user_metadata?.["full_name"];
-  const fullName = typeof rawName === "string" ? rawName.trim() : "";
+  const fullName = user?.displayName?.trim() ?? "";
 
   async function signOut() {
-    await supabase.auth.signOut();
+    await firebaseSignOut(firebaseAuth());
     queryClient.clear();
     void navigate({ to: "/auth" });
   }
@@ -54,7 +57,7 @@ export function PortalShell({
             </p>
           )}
           <div className="ml-auto flex items-center gap-2">
-            <AlertsMenu userId={user?.id} />
+            <AlertsMenu userId={user?.uid} />
             <button
               type="button"
               onClick={() => void signOut()}
@@ -104,29 +107,21 @@ function AlertsMenu({ userId }: { userId: string | undefined }) {
     queryKey: ["notifications", userId, "unread"],
     enabled: !!userId,
     queryFn: async () => {
-      const { count, error } = await supabase
-        .from("notifications")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", userId!)
-        .eq("read", false);
-      if (error) throw error;
-      return count ?? 0;
+      const snapshot = await getCountFromServer(
+        query(
+          collection(firestore(), COLLECTIONS.notifications),
+          where("user_id", "==", userId!),
+          where("read", "==", false),
+        ),
+      );
+      return snapshot.data().count;
     },
   });
 
   const list = useQuery({
     queryKey: ["notifications", userId, "list"],
     enabled: !!userId && open,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("notifications")
-        .select("id, title, body, read, created_at")
-        .eq("user_id", userId!)
-        .order("created_at", { ascending: false })
-        .limit(20);
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryFn: async () => (await rowsWhere("notifications", "user_id", userId!)).slice(0, 20),
   });
 
   useEffect(() => {

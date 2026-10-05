@@ -3,6 +3,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Loader2 } from "lucide-react";
 import { SiteLayout } from "@/components/site/SiteLayout";
 import { useAuth } from "@/hooks/useAuth";
+import { firebaseAuth } from "@/integrations/firebase/client";
 import { roleHome } from "@/lib/portal";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -20,13 +21,17 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 });
 
 function DashboardRedirect() {
-  const { roles, loading } = useAuth();
+  const { user, roles, loading } = useAuth();
   const navigate = useNavigate();
+  // Right after a sign-in, Firebase knows the new user a moment before useAuth does. Wait until
+  // they agree, or the redirect would use the previous user's roles (or none) and land on /client.
+  const signedInUid = firebaseAuth().currentUser?.uid ?? null;
+  const ready = !loading && user?.uid === signedInUid;
 
   useEffect(() => {
-    if (loading) return;
+    if (!ready) return;
     void navigate({ to: roleHome(roles), replace: true });
-  }, [loading, roles, navigate]);
+  }, [ready, roles, navigate]);
 
   return (
     <SiteLayout>

@@ -1,30 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-// import type { Session, User } from "@supabase/supabase-js";
-// import { supabase } from "@/integrations/supabase/client";
+import { onAuthStateChanged, type User } from "firebase/auth";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 
-import {
-  onAuthStateChanged,
-  type User,
-} from "firebase/auth";
-
-import {
-  doc,
-  getDoc,
-} from "firebase/firestore";
-
-import {
-  firebaseAuth,
-  firestore,
-} from "@/integrations/firebase/client";
-
-import {
-  COLLECTIONS,
-} from "@/integrations/firebase/config";
+import { firebaseAuth, firestore } from "@/integrations/firebase/client";
+import { COLLECTIONS } from "@/integrations/firebase/config";
+import { nowIso } from "@/integrations/firebase/db";
 
 export type AppRole = "admin" | "owner" | "supervisor" | "agent" | "client";
 
 type AuthValue = {
-  // session: Session | null;
   user: User | null;
   roles: AppRole[];
   loading: boolean;
@@ -36,103 +20,61 @@ type AuthValue = {
   refreshRoles: () => Promise<void>;
 };
 
-
 const AuthContext = createContext<AuthValue | undefined>(undefined);
 
+/**
+ * Reads user_roles/{uid} ({ roles: [...] }). A first sign-in has no document yet, so this creates the
+ * profile and the client role, which the Supabase handle_new_user() trigger used to do. The rules only
+ * let a user create their own role document with exactly ["client"]; staff roles come from the office.
+ */
+async function loadOrCreateRoles(user: User): Promise<AppRole[]> {
+  const db = firestore();
+  const roleRef = doc(db, COLLECTIONS.userRoles, user.uid);
+  const snapshot = await getDoc(roleRef);
+  if (snapshot.exists()) return (snapshot.data()["roles"] ?? []) as AppRole[];
+
+  const now = nowIso();
+  await setDoc(doc(db, COLLECTIONS.profiles, user.uid), {
+    full_name: user.displayName,
+    email: user.email,
+    phone: user.phoneNumber,
+    created_at: now,
+    updated_at: now,
+  });
+  await setDoc(roleRef, { roles: ["client"] });
+  return ["client"];
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  // const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [roles, setRoles] = useState<AppRole[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // const loadRoles = useCallback(async (userId: string | undefined) => {
-  //   if (!userId) {
-  //     setRoles([]);
-  //     return;
-  //   }
-  //   const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId);
-  //   setRoles((data ?? []).map((r) => r.role as AppRole));
-  // }, []);
-
-  const loadRoles = useCallback(async (userId?: string) => {
-    if (!userId) {
-      setRoles([]);
-      return;
-    }
-
-    const roleRef = doc(
-      firestore(),
-      COLLECTIONS.userRoles,
-      userId,
-    );
-
-    const snapshot = await getDoc(roleRef);
-
-    if (!snapshot.exists()) {
-      setRoles([]);
-      return;
-    }
-
-    const data = snapshot.data();
-
-    // setRoles(
-    //   data.role
-    //     ? [data.role as AppRole]
-    //     : [],
-    // );
-    
-    setRoles(
-      data["role"]
-        ? [data["role"] as AppRole]
-        : [],
-    );
+  const loadRoles = useCallback(async (nextUser: User | null) => {
+    setRoles(nextUser ? await loadOrCreateRoles(nextUser) : []);
   }, []);
 
-  // useEffect(() => {
-  //   let active = true;
-
-  //   const { data: sub } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-  //     if (!active) return;
-  //     setSession(nextSession);
-  //     void loadRoles(nextSession?.user?.id);
-  //   });
-
-  //   void supabase.auth.getSession().then(({ data }) => {
-  //     if (!active) return;
-  //     setSession(data.session);
-  //     void loadRoles(data.session?.user?.id).finally(() => setLoading(false));
-  //   });
-
-  //   return () => {
-  //     active = false;
-  //     sub.subscription.unsubscribe();
-  //   };
-  // }, [loadRoles]);
-
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(
-      firebaseAuth(),
-      async (nextUser) => {
-        setUser(nextUser);
-
-        try {
-          await loadRoles(nextUser?.uid);
-        } finally {
-          setLoading(false);
-        }
-      },
-    );
-
-    return unsubscribe;
+    return onAuthStateChanged(firebaseAuth(), async (nextUser) => {
+      // Back to loading until this user's roles arrive, so nothing (e.g. the /dashboard redirect)
+      // acts on the previous user's roles, or on none, when switching accounts.
+      setLoading(true);
+      setUser(nextUser);
+      try {
+        await loadRoles(nextUser);
+      } catch (error) {
+        console.error("[auth] could not load roles", error);
+        setRoles([]);
+      } finally {
+        setLoading(false);
+      }
+    });
   }, [loadRoles]);
 
   const value = useMemo<AuthValue>(() => {
     const isStaff = roles.some((r) => r === "admin" || r === "owner" || r === "supervisor" || r === "agent");
     return {
-      // session,
-      // user: session?.user ?? null,
       user,
-      refreshRoles: () => loadRoles(user?.uid),
       roles,
       loading,
       isStaff,
@@ -140,10 +82,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAgent: roles.some((r) => r === "admin" || r === "owner" || r === "agent"),
       isSupervisor: roles.includes("supervisor"),
       hasRole: (role) => roles.includes(role),
+      refreshRoles: () => loadRoles(user),
     };
-    // }, [session, roles, loading, loadRoles]);
   }, [user, roles, loading, loadRoles]);
-
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

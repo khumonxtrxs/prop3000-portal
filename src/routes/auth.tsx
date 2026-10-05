@@ -6,10 +6,6 @@ import { SiteLayout } from "@/components/site/SiteLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-// import { supabase } from "@/integrations/supabase/client";
-// import { DEMO_ACCOUNTS, DEMO_PASSWORD } from "@/lib/demo-accounts";
-// import { seedDemoAccounts } from "@/lib/admin.functions";
-
 import {
   createUserWithEmailAndPassword,
   GoogleAuthProvider,
@@ -18,8 +14,32 @@ import {
   updateProfile,
 } from "firebase/auth";
 
-import { firebaseAuth } from "@/integrations/firebase/client";
+import { doc, setDoc } from "firebase/firestore";
+
+import { firebaseAuth, firestore } from "@/integrations/firebase/client";
+import { COLLECTIONS } from "@/integrations/firebase/config";
 import { DEMO_ACCOUNTS, DEMO_PASSWORD } from "@/lib/demo-accounts";
+
+/** Firebase errors read like "Firebase: Error (auth/invalid-credential)."; show people something plainer. */
+function authErrorMessage(error: unknown, fallback: string): string {
+  const code = typeof error === "object" && error && "code" in error ? String(error.code) : "";
+  switch (code) {
+    case "auth/invalid-credential":
+    case "auth/wrong-password":
+    case "auth/user-not-found":
+      return "That email and password don't match an account.";
+    case "auth/email-already-in-use":
+      return "An account with that email already exists. Sign in instead.";
+    case "auth/weak-password":
+      return "Choose a password of at least 6 characters.";
+    case "auth/too-many-requests":
+      return "Too many attempts. Wait a minute and try again.";
+    case "auth/network-request-failed":
+      return "No connection. Check your internet and try again.";
+    default:
+      return fallback;
+  }
+}
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -41,63 +61,6 @@ function AuthPage() {
   const [fullName, setFullName] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // async function submit(event: React.FormEvent) {
-  //   event.preventDefault();
-  //   setBusy(true);
-  //   if (mode === "signup") {
-  //     const { data, error } = await supabase.auth.signUp({
-  //       email: email.trim(),
-  //       password,
-  //       options: { emailRedirectTo: window.location.origin, data: { full_name: fullName.trim() } },
-  //     });
-  //     setBusy(false);
-  //     if (error) {
-  //       toast.error(error.message);
-  //       return;
-  //     }
-  //     if (!data.session) {
-  //       toast.success("Check your email to confirm your account.");
-  //       return;
-  //     }
-  //     navigate({ to: "/dashboard" });
-  //     return;
-  //   }
-
-  //   const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-  //   setBusy(false);
-  //   if (error) {
-  //     toast.error(error.message);
-  //     return;
-  //   }
-  //   navigate({ to: "/dashboard" });
-  // }
-
-  // async function demoLogin(demoEmail: string) {
-  //   setBusy(true);
-  //   try {
-  //     await seedDemoAccounts();
-  //     const { error } = await supabase.auth.signInWithPassword({ email: demoEmail, password: DEMO_PASSWORD });
-  //     if (error) {
-  //       toast.error(error.message);
-  //       return;
-  //     }
-  //     navigate({ to: "/dashboard" });
-  //   } catch (error) {
-  //     toast.error(error instanceof Error ? error.message : "Demo sign-in failed.");
-  //   } finally {
-  //     setBusy(false);
-  //   }
-  // }
-
-  // async function google() {
-  //   const { error } = await supabase.auth.signInWithOAuth({
-  //     provider: "google",
-  //     options: { redirectTo: window.location.origin },
-  //   });
-  //   if (error) toast.error("Google sign-in failed. Please try again.");
-  //   // On success the browser redirects to Google and returns here signed in.
-  // }
-
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -116,6 +79,13 @@ function AuthPage() {
           await updateProfile(credential.user, {
             displayName: fullName.trim(),
           });
+          // useAuth creates the profile as soon as the account exists, which can be before the name
+          // is set above, so store the name on the profile here too. Merging makes the order irrelevant.
+          await setDoc(
+            doc(firestore(), COLLECTIONS.profiles, credential.user.uid),
+            { full_name: fullName.trim() },
+            { merge: true },
+          );
         }
 
         toast.success("Account created.");
@@ -131,11 +101,7 @@ function AuthPage() {
 
       await navigate({ to: "/dashboard" });
     } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Authentication failed.",
-      );
+      toast.error(authErrorMessage(error, "Authentication failed."));
     } finally {
       setBusy(false);
     }
@@ -152,11 +118,7 @@ function AuthPage() {
       );
       await navigate({ to: "/dashboard" });
     } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Demo sign-in failed.",
-      );
+      toast.error(authErrorMessage(error, "Demo sign-in failed."));
     } finally {
       setBusy(false);
     }
