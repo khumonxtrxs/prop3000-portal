@@ -2,7 +2,7 @@
 
 PROP3000 Portal is a full-stack web application developed for Prop3000 Developers and Prop3000 Investments. The platform combines the company's public-facing website with a role-based portal used to manage property enquiries, service requests, jobs, quotes, bookings, property listings and offers.
 
-The application is built with **TanStack Start and React 19**, hosted using **Cloudflare Workers**. **Supabase** currently provides sign-in, the database and file storage. The app is being migrated to **Firebase Authentication, Cloud Firestore and Firebase Storage**; the Firebase project, security rules and rule tests are in place, and the app switches over once every screen has been moved (see `docs/firebase-migration.md`).
+The application is built with **TanStack Start and React 19**, hosted using **Cloudflare Workers**, with **Firebase Authentication, Cloud Firestore and Firebase Storage** as the backend. It was originally built on Supabase; `docs/firebase-migration.md` records how it moved.
 
 ---
 
@@ -49,7 +49,7 @@ Authenticated users are assigned one of five roles:
 | Supervisor | Manage assigned jobs, progress and job history |
 | Owner | View business-wide analytics and operational information |
 
-Role information is stored in the Supabase `user_roles` table. After the Firebase migration it moves to the Firestore `user_roles/{uid}` documents.
+Role information is stored in Firestore as `user_roles/{uid}` = `{ roles: ["admin"] }`, keyed by the user's Firebase UID. Anyone who signs up becomes a client automatically; staff roles are assigned with the seeding script (see Demo Accounts).
 
 ---
 
@@ -65,9 +65,9 @@ Role information is stored in the Supabase `user_roles` table. After the Firebas
 | Language | TypeScript |
 | Styling | Tailwind CSS 4 |
 | UI components | Radix UI / shadcn-style components |
-| Authentication | Supabase Auth (moving to Firebase Authentication) |
-| Application data | Supabase Postgres (moving to Cloud Firestore) |
-| File storage | Supabase Storage (moving to Firebase Storage) |
+| Authentication | Firebase Authentication (email/password and Google) |
+| Application data | Cloud Firestore |
+| File storage | Firebase Storage |
 | Maps | Mapbox GL |
 | Charts | Recharts |
 | Validation | Zod |
@@ -85,20 +85,14 @@ PROP3000 separates application hosting from managed backend services.
 
 TanStack Start produces a server-side application bundle and public client assets during the build process. The resulting output is deployed to **Cloudflare Workers**, which executes the application server bundle and serves the static assets.
 
-Supabase currently provides the managed backend services used by the portal:
-
-- **Supabase Auth** - user authentication
-- **Supabase Postgres** - application data, protected by row-level security policies
-- **Supabase Storage** - uploaded files and images
-
-After the migration, Firebase takes over these jobs:
+Firebase provides these managed backend services used by the portal:
 
 - **Firebase Authentication** - user authentication
 - **Cloud Firestore** - application data
 - **Firebase Storage** - uploaded files and images
 - **Firebase Security Rules** - authorization and data-access boundaries
 
-Sign-in and data must always come from the same service: Supabase only returns rows to a user signed in to Supabase, so switching sign-in to Firebase on its own leaves every dashboard empty.
+The browser talks to Firestore directly, so the security rules are the access control. The public listings pages are server-rendered and read Firestore over its REST API (`src/integrations/firebase/rest.ts`), because Cloudflare Workers can't run `firebase-admin`.
 
 Cloudflare deployment settings are stored in the root `wrangler.jsonc`.
 
@@ -123,9 +117,7 @@ p3000portal
 Production Firebase project
 ```
 
-The application is currently undergoing a phased migration from Supabase to Firebase. The Firebase infrastructure is set up first; sign-in and the data screens then move over together so the live site keeps working at every step.
-
-For more detail, see:
+For the data model and how the Supabase schema maps onto Firestore, see:
 
 ```text
 docs/firebase-migration.md
@@ -176,7 +168,7 @@ firestore.indexes.json
 storage.rules
 wrangler.jsonc
 scripts/
-supabase/
+docs/legacy-supabase-schema/   # the original Postgres schema, kept as a record and as the demo-data source
 ```
 
 ---
@@ -190,7 +182,6 @@ Before running the project locally, install:
 - Node.js 22 or later (Vite 8 does not run on Node 18)
 - npm
 - Java 21 for the Firebase emulators
-- Docker and the Supabase CLI if working with the remaining Supabase data layer
 
 Clone the repository:
 
@@ -221,18 +212,11 @@ Fill in the required environment variables before starting the application.
 
 ## Environment Configuration
 
-The project uses environment variables for Firebase, Supabase and Mapbox.
+The project uses environment variables for Firebase and Mapbox.
 
 Example:
 
 ```env
-# Supabase
-VITE_SUPABASE_URL=https://<project-ref>.supabase.co
-VITE_SUPABASE_PUBLISHABLE_KEY=
-SUPABASE_URL=https://<project-ref>.supabase.co
-SUPABASE_PUBLISHABLE_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
-
 # Firebase
 VITE_FIREBASE_API_KEY=
 VITE_FIREBASE_AUTH_DOMAIN=<project-id>.firebaseapp.com
@@ -294,31 +278,21 @@ To use the emulators, set:
 VITE_FIREBASE_EMULATORS=true
 ```
 
+With the emulators, the other `VITE_FIREBASE_*` values can be placeholders (for example `VITE_FIREBASE_PROJECT_ID=demo-prop3000` and `VITE_FIREBASE_API_KEY=demo-api-key`). No Firebase project or internet connection is needed.
+
 The Windows emulator launcher uses `scripts/emulators.mjs` to avoid Java temporary-directory issues.
 
----
+### Loading the demo data
 
-## Supabase During Migration
-
-Supabase is still present while the Firebase migration is completed.
-
-For local Supabase development:
+With the emulators running, load the demo users and every lead, job, quote, booking, listing and offer the dashboards show:
 
 ```sh
-npx supabase start
+FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 FIRESTORE_EMULATOR_HOST=127.0.0.1:8081 npm run seed:demo-data
 ```
 
-To recreate the local database and apply the demo seed data:
+(In PowerShell, set the two variables with `$env:FIREBASE_AUTH_EMULATOR_HOST="127.0.0.1:9099"` and `$env:FIRESTORE_EMULATOR_HOST="127.0.0.1:8081"` first.)
 
-```sh
-npx supabase db reset
-```
-
-Without the Supabase variables in `.env`, every page shows "Missing Supabase environment variable(s)".
-
-The long-term application architecture replaces Supabase authentication, database access and storage with Firebase.
-
-The migration is performed incrementally so that each application workflow can be verified before the previous implementation is removed.
+The data comes from `docs/legacy-supabase-schema/seed.sql`, so there is still one place to edit demo data. Dates like `now() - interval '3 days'` are worked out when you seed. Running it again overwrites the same documents.
 
 ---
 
@@ -340,23 +314,16 @@ Demo password:
 Prop3000#2026
 ```
 
-While the app signs in through Supabase, the demo accounts are created automatically the first time someone clicks a demo login on `/auth` (this needs `SUPABASE_SERVICE_ROLE_KEY`).
-
-For the Firebase migration, Firebase demo users can be created or updated using:
+The demo users are created or updated with:
 
 ```sh
-npm run seed:demo-users
+npm run seed:demo-users       # users only
+npm run seed:demo-data        # users plus all demo data
 ```
 
-The script creates the Firebase Authentication users and matching:
+The script creates the Firebase Authentication users, with the same fixed uids the original Supabase seed used, plus matching `user_roles/{uid}` and `profiles/{uid}` documents.
 
-```text
-user_roles/{uid}
-```
-
-Firestore documents.
-
-A Firebase service-account credential is required when running the script against a hosted Firebase project. The service-account key must never be committed to the repository.
+To seed a hosted Firebase project instead of the emulators, set `FIREBASE_PROJECT_ID=<project-id>` and point `GOOGLE_APPLICATION_CREDENTIALS` at a service-account key file. The key must never be committed to the repository.
 
 ---
 
@@ -445,16 +412,14 @@ The deploy jobs read their values from the GitHub environments **production** an
 |---|---|---|
 | `CLOUDFLARE_API_TOKEN` | Secret | Deploying the Worker |
 | `CLOUDFLARE_ACCOUNT_ID` | Variable | Deploying the Worker |
-| `SUPABASE_URL` | Variable | Browser bundle and Worker runtime |
-| `SUPABASE_PUBLISHABLE_KEY` | Variable | Browser bundle and Worker runtime |
-| `SUPABASE_SERVICE_ROLE_KEY` | Secret | Worker runtime only (demo accounts, admin functions) |
+| `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_APP_ID` | Variables | Firebase web config, built into the app |
+| `FIREBASE_SERVICE_ACCOUNT` | Secret | JSON key of a service account with the **Firebase Rules Admin** role; deploys `firestore.rules` and `storage.rules` |
 | `VITE_MAPBOX_PUBLIC_TOKEN` | Secret | Maps in the browser |
 | `MAPBOX_ACCESS_TOKEN` | Secret | Address and route lookups on the server |
-| `VITE_FIREBASE_*` | Variables | Firebase web config (not used by the app until the migration lands) |
 
-The workflow uploads `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY` and `MAPBOX_ACCESS_TOKEN` to Cloudflare as Worker secrets on every deploy, so nobody needs to set them by hand in the Cloudflare dashboard.
+Each deploy first publishes the Firestore and Storage security rules to that environment's Firebase project, then builds and deploys the Worker. `MAPBOX_ACCESS_TOKEN` is uploaded to Cloudflare as a Worker secret, so nobody needs to set it by hand in the Cloudflare dashboard.
 
-In Supabase, add the production and staging URLs under **Authentication > URL Configuration** so sign-in redirects back to the live site.
+In Firebase, under **Authentication > Settings > Authorised domains**, add both `workers.dev` domains, or Google sign-in is rejected on the live site.
 
 ---
 
@@ -492,7 +457,7 @@ Then, in another terminal:
 npm run test:rules
 ```
 
-The project contains **26 automated Firestore security-rule tests** covering important authorization boundaries, including:
+The project contains **33 automated Firestore security-rule tests** covering important authorization boundaries, including:
 
 - anonymous public submissions
 - client-owned data
@@ -615,7 +580,7 @@ CONTRIBUTING.md
 
 ## Hosting Strategy
 
-PROP3000 uses Cloudflare Workers for application hosting and Supabase (moving to Firebase) for managed backend services.
+PROP3000 uses Cloudflare Workers for application hosting and Firebase for managed backend services.
 
 TanStack Start generates a server-side application bundle that can be executed by Cloudflare Workers together with the application's static assets. This removes the requirement to manage a traditional dedicated web server while still allowing server-rendered application functionality.
 
@@ -681,5 +646,5 @@ Current platform work includes:
 - Cloud Firestore
 - Firebase Security Rules
 - Firebase demo-user seeding
-- Supabase-to-Firebase migration
+- Supabase-to-Firebase migration (complete)
 - Staging and production environment separation

@@ -21,10 +21,10 @@ npm run dev
 | `npm run lint` | ESLint |
 | `npx tsc --noEmit` | Type check |
 | `npm run format` | Prettier |
-| `npx supabase db reset` | Fresh local DB with all migrations and demo seed data |
 | `npm run emulators` | Local Firebase emulators (needs Java) |
 | `npm run test:rules` | Security rule tests, with the emulators running |
 | `npm run seed:demo-users` | Creates or updates the five Firebase demo accounts and their `user_roles/{uid}` documents |
+| `npm run seed:demo-data` | The demo accounts plus every demo lead, job, quote, booking, listing and offer |
 
 ## Where things are
 
@@ -35,8 +35,10 @@ npm run dev
 | `src/components/portal/` | Portal shell and charts |
 | `src/components/ui/` | shadcn/ui primitives |
 | `src/lib/` | Helpers, server functions, company constants (`prop3000.ts`) |
-| `src/integrations/supabase/` | Supabase clients and auth middleware |
-| `supabase/migrations/` | Database schema and RLS policies |
+| `src/integrations/firebase/` | Firebase client, Firestore helpers (`db.ts`) and server-side REST reads (`rest.ts`) |
+| `src/lib/db-types.ts` | Row types for every collection |
+| `firestore.rules`, `storage.rules` | Who may read and write what. Test with `npm run test:rules` |
+| `docs/legacy-supabase-schema/` | The original Postgres schema, kept as a record; `seed.sql` is still the demo-data source |
 | `design_handoff_prop3000_portal/` | **Design source of truth.** Open `design-reference/Prop3000 Portal.dc.html` in a browser. Spec is in its `README.md` |
 
 ## Branching
@@ -52,7 +54,8 @@ Each piece of work gets its own branch off `main`:
 | `chore/` | Tooling, config, dependencies | `chore/eslint-config` |
 | `docs/` | Documentation only | `docs/setup-guide` |
 
-Planned branches, in order. Branches 4-8 are the Firebase migration; 9 onwards are the design handoff:
+Planned branches, in order. Branches 4-8 are the Firebase migration, delivered together in
+`feature/firebase-migration`; 9 onwards are the design handoff:
 
 1. `feature/project-setup` (the portal source, design handoff and repo tooling)
 2. `feature/remove-lovable` (runs standalone, no Lovable packages)
@@ -91,9 +94,8 @@ Never force-push or rewrite history that has already been pushed (see `AGENTS.md
 
 ## Environment and services
 
-The portal is moving from Supabase to **Firebase** (a course requirement), hosted on **Cloudflare
-Workers**. The plan and its branch order are in [docs/firebase-migration.md](docs/firebase-migration.md).
-Supabase still serves the app until that migration lands, so both sets of variables are live for now.
+The portal runs on **Firebase** (a course requirement), hosted on **Cloudflare Workers**. How it
+moved off Supabase is recorded in [docs/firebase-migration.md](docs/firebase-migration.md).
 
 **Firebase**
 1. Create a project in the [Firebase console](https://console.firebase.google.com), then add a
@@ -122,28 +124,21 @@ command above passes `--project` explicitly.
 ```sh
 npm run test:rules
 ```
-26 tests cover the boundaries that matter: anonymous people can submit a lead but read nothing,
+33 tests cover the boundaries that matter: anonymous people can submit a lead but read nothing,
 clients see only their own records, supervisors only their own jobs, draft listings stay hidden,
-and nobody can grant themselves a role. Add a test with every rule change.
+buyers can't approve their own offers, and nobody can grant themselves a role. Add a test with
+every rule change.
+
+**Demo data.** With the emulators running, load the five demo accounts and all the demo records:
+```sh
+FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 FIRESTORE_EMULATOR_HOST=127.0.0.1:8081 npm run seed:demo-data
+```
+The data is read from `docs/legacy-supabase-schema/seed.sql`. To seed a hosted project, set
+`FIREBASE_PROJECT_ID` and `GOOGLE_APPLICATION_CREDENTIALS` (a service-account key file, never committed).
 
 On Windows, `npm run emulators` goes through `scripts/emulators.mjs`, which points Java at a short
 temp directory and strips `JAVA_TOOL_OPTIONS`. Without that the Firestore emulator fails with
 "Unable to establish loopback connection" and Storage fails with "Unexpected rules runtime error".
-
-**Supabase** (until the migration finishes)
-
-**Supabase**
-1. Create a project at [supabase.com](https://supabase.com). The team lead owns it; share keys privately, never in git.
-2. Apply the schema, RLS policies and storage buckets from `supabase/migrations/`:
-   ```sh
-   npx supabase login
-   npx supabase link --project-ref <project-ref>
-   npx supabase db push
-   ```
-   Update `project_id` in `supabase/config.toml` to the same `<project-ref>`.
-3. Copy the URL, publishable (anon) key and service role key from **Project Settings > API** into `.env`.
-4. **Google sign-in:** under **Authentication > Providers > Google**, add a Google OAuth client ID and secret. Under **Authentication > URL Configuration**, add `http://localhost:8080` and your deployed URL to the redirect allow list.
-5. The demo accounts (`Prop3000#2026`) are created automatically the first time someone clicks a demo login on `/auth`.
 
 **Mapbox**
 Create a public `pk.` token for `VITE_MAPBOX_PUBLIC_TOKEN`. For `MAPBOX_ACCESS_TOKEN`, use a secret token or the same public token. Without tokens the map shows "Map is not configured yet."

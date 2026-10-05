@@ -4,7 +4,9 @@ Firebase is a course requirement, so the portal's data, auth and file storage mo
 (Postgres) to Firebase (Firestore). Hosting stays on Cloudflare Workers, which `npm run build`
 already targets.
 
-This document is the plan. Each numbered phase below is one branch and one pull request.
+**Status: done.** Phases 3-7 landed together in `feature/firebase-migration`, because sign-in and
+data have to move at the same time (see "What actually happened" at the end). This document was
+the plan; the end of it records where the build differed.
 
 ## What changes and what doesn't
 
@@ -120,3 +122,45 @@ Google sign-in is rejected in production.
 - **No transactions across collections by default.** Converting a lead to a job writes a job, a
   quote, a history entry and a notification. That becomes a Firestore batched write so it can't
   half-succeed.
+
+## What actually happened
+
+**Why one branch, not five.** Supabase only returns rows to a user signed in to Supabase. Moving
+sign-in to Firebase on its own (phase 3) left every dashboard empty, because the data was still in
+Supabase. So sign-in, the forms, listings, dashboards and the Supabase removal shipped together.
+
+**Where the build differs from the plan above:**
+
+- **Roles** are `user_roles/{uid}` = `{ roles: [...] }`, as the rules expect. The first seed script
+  wrote `{ role: "admin" }`, which the rules never matched; that is fixed.
+- **Sign-up** no longer depends on a trigger. On first sign-in, `useAuth` creates the profile and
+  `{ roles: ["client"] }`. The rules allow a user to create exactly that document for themselves
+  and nothing more.
+- **Timestamps** are ISO-8601 strings, as Postgres returned them, so no screen had to change how it
+  reads or sorts dates. Filtered queries sort in the browser, so no composite indexes are needed.
+- **Reference numbers** (`SR-4F2A9C`, `OF-…`) are generated in the app (`newReference()` in
+  `src/integrations/firebase/db.ts`) instead of by Postgres column defaults.
+- **The offer trigger** (`notify_offer_status`) is now `src/lib/offers.ts`: the buyer is notified
+  when they make an offer, and in the same batch as the agent's decision.
+- **Joins**: offers carry a copy of the listing's title, address, price and agent contact.
+- **Batched writes** keep multi-document changes all-or-nothing: converting a lead to a job, a
+  supervisor's status change plus its history entry, and an agent's decision plus the buyer's
+  notification.
+- **Server-side listing reads** use the Firestore REST API with the public key
+  (`src/integrations/firebase/rest.ts`), as planned.
+- **Demo data** is loaded by `npm run seed:demo-data`, which reads the existing
+  `docs/legacy-supabase-schema/seed.sql` so there is still a single source of demo data. Demo users
+  keep their fixed uids from that file, so every relation still lines up.
+
+**Rule changes**, each with a test (33 in total now):
+
+- A buyer can no longer change their own offer. The Supabase policy allowed it, which meant a buyer
+  could approve their own offer; only agents decide now.
+- A client accepting or declining a quote can change only its status, not the amounts.
+- A user may only notify themselves; staff may notify anyone. Before, anyone signed in could
+  write a notification to anyone.
+- Jobs may be created as `approved` (what the lead desk does), and quotes as `draft` or `sent`
+  (the old rule allowed a `quoted` status that quotes never have).
+- Public listing reads are written as a list of visible statuses so that the signed-out "published
+  listings" query is provably allowed.
+- Lead photos live in dated subfolders (`lead-photos/requests/2026/…`), which the Storage rule now matches.
