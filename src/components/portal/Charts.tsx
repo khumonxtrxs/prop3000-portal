@@ -1,97 +1,130 @@
-import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Legend,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import { prettyStatus } from "@/lib/prop3000";
+import { Bar, BarChart, Cell, LabelList, Pie, PieChart, ResponsiveContainer, XAxis } from "recharts";
+import { money, prettyStatus } from "@/lib/prop3000";
+import { statusTone, type StatusTone } from "@/lib/status";
 
-const PALETTE = ["#f97316", "#0ea5e9", "#22c55e", "#a855f7", "#ef4444", "#eab308", "#14b8a6"];
+type Point = { name: string; value: number };
 
-const axis = { stroke: "#64748b", fontSize: 11 };
+/** Chart fills come from the design tokens in src/styles.css, never hex. */
+const TONE_FILL: Record<StatusTone, string> = {
+  wait: "var(--color-accent)",
+  motion: "var(--color-primary)",
+  good: "var(--color-success)",
+  bad: "var(--color-brick)",
+  neutral: "var(--color-chart-5)",
+};
 
-export function TrendChart({ data, label }: { data: { name: string; value: number }[]; label: string }) {
+const TONE_BG: Record<StatusTone, string> = {
+  wait: "bg-accent",
+  motion: "bg-primary",
+  good: "bg-success",
+  bad: "bg-brick",
+  neutral: "bg-chart-5",
+};
+
+/** Lead trend over 6 months: current month orange, prior months --chart-5. */
+export function LeadTrendBars({ data }: { data: Point[] }) {
+  const summary = data.map((d) => `${d.name} ${d.value}`).join(", ");
   return (
-    <ResponsiveContainer width="100%" height={230}>
-      <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -18 }}>
-        <defs>
-          <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#f97316" stopOpacity={0.55} />
-            <stop offset="100%" stopColor="#f97316" stopOpacity={0.03} />
-          </linearGradient>
-        </defs>
-        <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
-        <XAxis dataKey="name" tick={axis} />
-        <YAxis allowDecimals={false} tick={axis} />
-        <Tooltip formatter={(value) => [String(value), label]} />
-        <Area type="monotone" dataKey="value" stroke="#f97316" strokeWidth={2} fill="url(#trendFill)" />
-      </AreaChart>
-    </ResponsiveContainer>
+    <div role="img" aria-label={`Leads per month: ${summary}`}>
+      <ResponsiveContainer width="100%" height={240}>
+        <BarChart data={data} margin={{ top: 24, right: 4, bottom: 0, left: 4 }}>
+          <XAxis
+            dataKey="name"
+            tickLine={false}
+            axisLine={false}
+            tick={{ fill: "var(--color-ink-subtle)", fontSize: 12 }}
+          />
+          <Bar dataKey="value" isAnimationActive={false}>
+            <LabelList dataKey="value" position="top" fill="var(--color-primary)" fontSize={13} fontWeight={700} />
+            {data.map((point, index) => (
+              <Cell
+                key={point.name}
+                fill={index === data.length - 1 ? "var(--color-accent)" : "var(--color-chart-5)"}
+              />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
   );
 }
 
-export function StatusPie({ data }: { data: { name: string; value: number }[] }) {
+/** Revenue by stage: horizontal bars, each in its status colour. */
+export function StageBars({ data }: { data: { status: string; value: number }[] }) {
+  const max = Math.max(1, ...data.map((d) => d.value));
+  return (
+    <ul className="space-y-4">
+      {data.map((stage) => (
+        <li key={stage.status}>
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-foreground">{prettyStatus(stage.status)}</span>
+            <span className="font-display text-lg font-bold text-primary">{money(stage.value)}</span>
+          </div>
+          <div className="mt-1 h-2 overflow-hidden rounded-sm bg-secondary" aria-hidden="true">
+            <div
+              className={`h-full ${TONE_BG[statusTone(stage.status)]}`}
+              style={{ width: `${(stage.value / max) * 100}%` }}
+            />
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Job status mix as a donut with a coloured legend. */
+export function StatusDonut({ data }: { data: Point[] }) {
   if (data.length === 0) return <p className="py-10 text-center text-sm text-muted-foreground">No data yet.</p>;
+  const summary = data.map((d) => `${prettyStatus(d.name)} ${d.value}`).join(", ");
   return (
-    <ResponsiveContainer width="100%" height={230}>
-      <PieChart>
-        <Pie
-          data={data.map((d) => ({ ...d, name: prettyStatus(d.name) }))}
-          dataKey="value"
-          nameKey="name"
-          innerRadius={45}
-          outerRadius={80}
-          paddingAngle={3}
-        >
-          {data.map((_, index) => (
-            <Cell key={index} fill={PALETTE[index % PALETTE.length]} />
-          ))}
-        </Pie>
-        <Legend wrapperStyle={{ fontSize: 11 }} />
-        <Tooltip />
-      </PieChart>
-    </ResponsiveContainer>
+    <div className="flex flex-wrap items-center gap-6">
+      <div role="img" aria-label={`Job status mix: ${summary}`} className="size-40 shrink-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={data}
+              dataKey="value"
+              nameKey="name"
+              innerRadius={40}
+              outerRadius={78}
+              stroke="none"
+              isAnimationActive={false}
+            >
+              {data.map((point) => (
+                <Cell key={point.name} fill={TONE_FILL[statusTone(point.name)]} />
+              ))}
+            </Pie>
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+      <ul className="space-y-2">
+        {data.map((point) => (
+          <li key={point.name} className="flex items-center gap-2">
+            <span aria-hidden="true" className={`size-3 rounded-sm ${TONE_BG[statusTone(point.name)]}`} />
+            <span className="text-foreground">{prettyStatus(point.name)}</span>
+            <span className="font-bold text-foreground">· {point.value}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
-export function CountBars({ data, label }: { data: { name: string; value: number }[]; label: string }) {
+/** Demand by trade: top trades as orange bars with counts. */
+export function TradeBars({ data }: { data: Point[] }) {
   if (data.length === 0) return <p className="py-10 text-center text-sm text-muted-foreground">No data yet.</p>;
+  const max = Math.max(1, ...data.map((d) => d.value));
   return (
-    <ResponsiveContainer width="100%" height={230}>
-      <BarChart data={data.map((d) => ({ ...d, name: prettyStatus(d.name) }))} margin={{ top: 8, right: 8, bottom: 0, left: -18 }}>
-        <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
-        <XAxis dataKey="name" tick={axis} interval={0} />
-        <YAxis allowDecimals={false} tick={axis} />
-        <Tooltip formatter={(value) => [String(value), label]} />
-        <Bar dataKey="value" radius={[6, 6, 0, 0]}>
-          {data.map((_, index) => (
-            <Cell key={index} fill={PALETTE[index % PALETTE.length]} />
-          ))}
-        </Bar>
-      </BarChart>
-    </ResponsiveContainer>
-  );
-}
-
-export function MoneyBars({ data }: { data: { name: string; value: number }[] }) {
-  return (
-    <ResponsiveContainer width="100%" height={230}>
-      <BarChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 6 }}>
-        <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
-        <XAxis dataKey="name" tick={axis} interval={0} />
-        <YAxis tick={axis} tickFormatter={(v: number) => `R${Math.round(v / 1000)}k`} />
-        <Tooltip formatter={(value) => [`R${Number(value).toLocaleString("en-ZA")}`, "Value"]} />
-        <Bar dataKey="value" radius={[6, 6, 0, 0]} fill="#0ea5e9" />
-      </BarChart>
-    </ResponsiveContainer>
+    <ul className="space-y-3">
+      {data.map((trade) => (
+        <li key={trade.name} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_2rem] items-center gap-3">
+          <span className="font-display truncate font-bold uppercase text-foreground">{prettyStatus(trade.name)}</span>
+          <span className="h-4 overflow-hidden rounded-sm bg-secondary" aria-hidden="true">
+            <span className="block h-full bg-accent" style={{ width: `${(trade.value / max) * 100}%` }} />
+          </span>
+          <span className="font-display text-right text-lg font-bold text-foreground">{trade.value}</span>
+        </li>
+      ))}
+    </ul>
   );
 }

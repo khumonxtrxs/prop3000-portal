@@ -1,13 +1,14 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Bell, Check, FileText, Hammer, Home, Loader2, X } from "lucide-react";
-import { Empty, Panel, PortalShell, StatCard } from "@/components/portal/PortalShell";
+import { Loader2 } from "lucide-react";
+import { Empty, PortalShell } from "@/components/portal/PortalShell";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { money, prettyStatus, shortDate, whatsappLink } from "@/lib/prop3000";
+import { STATUS_BORDER_LEFT, statusTone } from "@/lib/status";
 
 export const Route = createFileRoute("/_authenticated/client")({
   head: () => ({
@@ -26,7 +27,33 @@ export const Route = createFileRoute("/_authenticated/client")({
   component: ClientDashboard,
 });
 
-type QuoteLine = { description?: string; qty?: number; amount?: number };
+type QuoteLine = Record<string, unknown>;
+
+function asNumber(value: unknown): number | null {
+  const n = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN;
+  return Number.isFinite(n) ? n : null;
+}
+
+function lineLabel(line: QuoteLine): string {
+  const label = line["description"] ?? line["label"] ?? line["item"] ?? line["name"];
+  return typeof label === "string" && label.trim() ? label : "Item";
+}
+
+/** Reads a line item's price whichever field name the data uses. */
+function lineAmount(line: QuoteLine): number {
+  const direct =
+    asNumber(line["amount"]) ?? asNumber(line["total"]) ?? asNumber(line["line_total"]) ?? asNumber(line["price_total"]);
+  if (direct !== null) return direct;
+  const qty = asNumber(line["qty"]) ?? asNumber(line["quantity"]) ?? 1;
+  const unit =
+    asNumber(line["unit_price"]) ?? asNumber(line["rate"]) ?? asNumber(line["price"]) ?? asNumber(line["unit_cost"]);
+  return unit !== null ? qty * unit : 0;
+}
+
+function quoteLines(value: unknown): QuoteLine[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((line): line is QuoteLine => typeof line === "object" && line !== null && !Array.isArray(line));
+}
 
 function ClientDashboard() {
   const { user, loading } = useAuth();
@@ -37,271 +64,196 @@ function ClientDashboard() {
     enabled: !!user?.id,
     queryFn: async () => {
       const uid = user!.id;
-      const [requests, properties, jobs, quotes, bookings, notifications] = await Promise.all([
+      const [requests, jobs, quotes, bookings] = await Promise.all([
         supabase.from("service_requests").select("*").eq("client_id", uid).order("created_at", { ascending: false }),
-        supabase.from("property_submissions").select("*").eq("client_id", uid).order("created_at", { ascending: false }),
         supabase.from("jobs").select("*").eq("client_id", uid).order("created_at", { ascending: false }),
         supabase.from("quotes").select("*").eq("client_id", uid).order("created_at", { ascending: false }),
         supabase.from("bookings").select("*").eq("client_id", uid).order("scheduled_date", { ascending: true }),
-        supabase
-          .from("notifications")
-          .select("*")
-          .eq("user_id", uid)
-          .order("created_at", { ascending: false })
-          .limit(10),
       ]);
       return {
         requests: requests.data ?? [],
-        properties: properties.data ?? [],
         jobs: jobs.data ?? [],
         quotes: quotes.data ?? [],
         bookings: bookings.data ?? [],
-        notifications: notifications.data ?? [],
       };
     },
   });
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ["client-portal"] });
-
   const decideQuote = useMutation({
-    mutationFn: async (input: { id: string; status: "approved" | "declined" }) => {
+    mutationFn: async (input: { id: string; number: string; status: "approved" | "declined" }) => {
       const { error } = await supabase.from("quotes").update({ status: input.status }).eq("id", input.id);
       if (error) throw error;
     },
     onSuccess: async (_res, input) => {
-      toast.success(input.status === "approved" ? "Quote approved — the office will schedule the work." : "Quote declined.");
-      await refresh();
+      toast.success(
+        input.status === "approved"
+          ? `Quote ${input.number} approved — the office has been notified and will schedule the work.`
+          : `Quote ${input.number} declined — the office has been notified.`,
+      );
+      await queryClient.invalidateQueries({ queryKey: ["client-portal"] });
+      await queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const markRead = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("notifications").update({ read: true }).eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: async () => {
-      await refresh();
-      await queryClient.invalidateQueries({ queryKey: ["notifications"] });
-    },
-  });
-
-  if (loading || data.isLoading) {
+  if (loading || data.isLoading || !data.data) {
     return (
-      <PortalShell badge="Client" title="My portal" subtitle="Loading your requests…">
-        <Loader2 className="mx-auto size-6 animate-spin text-accent" />
+      <PortalShell title="My portal" subtitle="Loading your quotes and requests…">
+        <Loader2 className="mx-auto size-6 animate-spin text-accent" aria-label="Loading" />
       </PortalShell>
     );
   }
 
-  const rows = data.data!;
-  const unread = rows.notifications.filter((n) => !n.read).length;
-  const pendingQuotes = rows.quotes.filter((q) => q.status !== "approved" && q.status !== "declined");
+  const rows = data.data;
+  const jobsById = new Map(rows.jobs.map((job) => [job.id, job]));
+  const requestsById = new Map(rows.requests.map((request) => [request.id, request]));
+  const waiting = rows.quotes.filter((quote) => quote.status === "sent").length;
 
   return (
     <PortalShell
-      badge="Client / homeowner"
       title="My portal"
-      subtitle="Everything you've sent Prop3000: quote approvals, live job progress, your cash offer and your booked dates."
+      subtitle={
+        waiting > 0
+          ? `${waiting} quote${waiting === 1 ? "" : "s"} waiting on your approval.`
+          : "Quotes, jobs, requests and notifications in one place."
+      }
     >
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard icon={Hammer} label="My requests" value={String(rows.requests.length)} />
-        <StatCard icon={FileText} label="Quotes to approve" value={String(pendingQuotes.length)} />
-        <StatCard icon={Home} label="Active jobs" value={String(rows.jobs.filter((j) => j.status !== "complete").length)} />
-        <StatCard icon={Bell} label="New notifications" value={String(unread)} />
-      </div>
+      <section aria-labelledby="quotes-heading">
+        <h2 id="quotes-heading" className="text-display text-3xl uppercase text-foreground">
+          My quotes
+        </h2>
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-2">
-        <Panel title="Quotes waiting on you">
-          {rows.quotes.length === 0 ? (
+        {rows.quotes.length === 0 ? (
+          <div className="mt-4">
             <Empty>No quotes yet. Once the office prices your request it appears here to approve.</Empty>
-          ) : (
-            <ul className="space-y-3">
-              {rows.quotes.map((quote) => (
-                <li key={quote.id} className="rounded-lg border border-border p-4">
+          </div>
+        ) : (
+          <ul className="mt-4 space-y-4">
+            {rows.quotes.map((quote) => {
+              const job = quote.job_id ? jobsById.get(quote.job_id) : undefined;
+              const request = quote.service_request_id ? requestsById.get(quote.service_request_id) : undefined;
+              const title =
+                job?.title ?? (request ? request.service_types.map(prettyStatus).join(", ") : "Renovation quote");
+              const lines = quoteLines(quote.line_items);
+              const canDecide = quote.status === "sent";
+
+              return (
+                <li
+                  key={quote.id}
+                  className={`rounded-sm border border-border border-l-4 bg-card p-6 ${STATUS_BORDER_LEFT[statusTone(quote.status)]}`}
+                >
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold">{quote.quote_number}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Total {money(Number(quote.total))} (incl. VAT {money(Number(quote.vat))}) ·{" "}
-                        {quote.valid_until ? `valid to ${shortDate(quote.valid_until)}` : "no expiry"}
+                    <div className="min-w-0">
+                      <p className="text-label text-[12px] text-ink-subtle">
+                        {quote.quote_number}
+                        {job ? ` · ${job.reference}` : ""}
+                        {quote.valid_until ? ` · valid to ${shortDate(quote.valid_until)}` : ""}
                       </p>
+                      <h3 className="font-display mt-1 text-3xl font-bold uppercase leading-tight text-foreground">
+                        {title}
+                      </h3>
                     </div>
                     <StatusBadge status={quote.status} />
                   </div>
-                  <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-                    {((quote.line_items as QuoteLine[]) ?? []).map((line, index) => (
-                      <li key={index}>
-                        {line.description ?? "Item"} — {money(Number(line.amount ?? 0))}
-                      </li>
+
+                  <dl className="mt-4">
+                    {lines.map((line, index) => (
+                      <div key={index} className="flex justify-between gap-4 py-1 text-muted-foreground">
+                        <dt>{lineLabel(line)}</dt>
+                        <dd className="shrink-0 font-semibold tabular-nums text-foreground">{money(lineAmount(line))}</dd>
+                      </div>
                     ))}
-                  </ul>
-                  {quote.status !== "approved" && quote.status !== "declined" && (
-                    <div className="mt-3 flex gap-2">
+                    <div className="mt-2 flex justify-between gap-4 border-t border-divider pt-3 text-muted-foreground">
+                      <dt>VAT 15%</dt>
+                      <dd className="shrink-0 font-semibold tabular-nums text-foreground">{money(Number(quote.vat))}</dd>
+                    </div>
+                    <div className="mt-2 flex items-end justify-between gap-4">
+                      <dt className="text-label text-[12px] text-ink-subtle">Total</dt>
+                      <dd className="font-display shrink-0 text-[30px] font-bold leading-none tabular-nums text-primary">
+                        {money(Number(quote.total))}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  {canDecide && (
+                    <div className="mt-5 flex flex-wrap gap-3 border-t border-divider pt-5">
                       <Button
-                        size="sm"
-                        variant="accent"
+                        variant="success"
+                        size="lg"
+                        className="font-display font-bold uppercase tracking-wide"
                         disabled={decideQuote.isPending}
-                        onClick={() => decideQuote.mutate({ id: quote.id, status: "approved" })}
+                        onClick={() => decideQuote.mutate({ id: quote.id, number: quote.quote_number, status: "approved" })}
                       >
-                        <Check className="size-4" /> Approve quote
+                        Approve quote
                       </Button>
                       <Button
-                        size="sm"
-                        variant="outline"
+                        variant="outlineBrick"
+                        size="lg"
+                        className="font-display font-bold uppercase tracking-wide"
                         disabled={decideQuote.isPending}
-                        onClick={() => decideQuote.mutate({ id: quote.id, status: "declined" })}
+                        onClick={() => decideQuote.mutate({ id: quote.id, number: quote.quote_number, status: "declined" })}
                       >
-                        <X className="size-4" /> Decline
+                        Decline
+                      </Button>
+                      <Button asChild variant="whatsapp" size="lg" className="font-display font-bold uppercase tracking-wide">
+                        <a
+                          href={whatsappLink(`Hi Prop3000, I have a question about quote ${quote.quote_number}.`)}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Query on WhatsApp
+                        </a>
                       </Button>
                     </div>
                   )}
                 </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
+              );
+            })}
+          </ul>
+        )}
+      </section>
 
-        <Panel title="Notifications">
-          {rows.notifications.length === 0 ? (
-            <Empty>Nothing yet — we'll ping you when a status changes.</Empty>
-          ) : (
-            <ul className="divide-y divide-border text-sm">
-              {rows.notifications.map((item) => (
-                <li key={item.id} className="flex items-start justify-between gap-3 py-3">
-                  <div>
-                    <p className={item.read ? "font-medium text-muted-foreground" : "font-semibold"}>{item.title}</p>
-                    {item.body && <p className="text-muted-foreground">{item.body}</p>}
-                    <p className="text-xs text-muted-foreground">{shortDate(item.created_at)}</p>
-                  </div>
-                  {!item.read && (
-                    <Button size="sm" variant="outline" onClick={() => markRead.mutate(item.id)}>
-                      Mark read
-                    </Button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
+      <section aria-labelledby="requests-heading" className="mt-10">
+        <h2 id="requests-heading" className="text-display text-3xl uppercase text-foreground">
+          My requests &amp; bookings
+        </h2>
 
-        <Panel title="My renovation jobs">
-          {rows.jobs.length === 0 ? (
-            <Empty>No job started yet.</Empty>
-          ) : (
-            <ul className="space-y-4 text-sm">
-              {rows.jobs.map((job) => (
-                <li key={job.id}>
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-semibold">{job.title}</p>
-                    <StatusBadge status={job.status} />
-                  </div>
-                  <p className="text-muted-foreground">
-                    {job.address} · {job.reference} · {money(job.quote_amount)}
+        {rows.requests.length === 0 && rows.bookings.length === 0 ? (
+          <div className="mt-4">
+            <Empty>No requests or bookings yet.</Empty>
+          </div>
+        ) : (
+          <ul className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(min(100%,360px),1fr))] gap-4">
+            {rows.requests.map((request) => (
+              <li key={`request-${request.id}`} className="rounded-sm border border-border bg-card p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-label text-[12px] text-ink-subtle">
+                    {request.reference} · {shortDate(request.created_at)}
                   </p>
-                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-secondary">
-                    <div className="gradient-accent h-full transition-all" style={{ width: `${job.progress}%` }} />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-
-        <Panel
-          title="My cash-sale submissions"
-          action={
-            <Button asChild size="sm" variant="outline">
-              <Link to="/sell">Submit another</Link>
-            </Button>
-          }
-        >
-          {rows.properties.length === 0 ? (
-            <Empty>No property submitted for a cash offer yet.</Empty>
-          ) : (
-            <ul className="space-y-3 text-sm">
-              {rows.properties.map((property) => (
-                <li key={property.id} className="rounded-lg border border-border p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold">{property.address}</p>
-                      <p className="text-muted-foreground">
-                        {property.reference} · {prettyStatus(property.condition)} · our offer {money(property.offer_amount)}
-                      </p>
-                    </div>
-                    <StatusBadge status={property.status} />
-                  </div>
-                  {property.offer_amount ? (
-                    <Button asChild size="sm" variant="brick" className="mt-3">
-                      <a
-                        href={whatsappLink(`Hi Prop3000, I'd like to discuss the cash offer on ${property.reference}.`)}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Respond to the offer
-                      </a>
-                    </Button>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-
-        <Panel
-          title="My requests"
-          action={
-            <Button asChild size="sm" variant="outline">
-              <Link to="/request">New request</Link>
-            </Button>
-          }
-        >
-          {rows.requests.length === 0 ? (
-            <Empty>No renovation requests yet.</Empty>
-          ) : (
-            <ul className="divide-y divide-border text-sm">
-              {rows.requests.map((request) => (
-                <li key={request.id} className="flex items-start justify-between gap-3 py-3">
-                  <div>
-                    <p className="font-semibold">{request.service_types.map(prettyStatus).join(", ")}</p>
-                    <p className="text-muted-foreground">
-                      {request.address} · {request.reference}
-                    </p>
-                  </div>
                   <StatusBadge status={request.status} />
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-
-        <Panel
-          title="My bookings"
-          action={
-            <Button asChild size="sm" variant="outline">
-              <Link to="/book">Book a date</Link>
-            </Button>
-          }
-        >
-          {rows.bookings.length === 0 ? (
-            <Empty>No dates booked yet.</Empty>
-          ) : (
-            <ul className="divide-y divide-border text-sm">
-              {rows.bookings.map((booking) => (
-                <li key={booking.id} className="flex items-start justify-between gap-3 py-3">
-                  <div>
-                    <p className="font-semibold">{prettyStatus(booking.booking_type)}</p>
-                    <p className="text-muted-foreground">
-                      {shortDate(booking.scheduled_date)} · {booking.scheduled_time.slice(0, 5)}
-                    </p>
-                  </div>
+                </div>
+                <h3 className="font-display mt-2 text-2xl font-bold uppercase leading-tight text-foreground">
+                  {request.service_types.map(prettyStatus).join(", ")}
+                </h3>
+                <p className="mt-1 text-sm text-muted-foreground">{request.address}</p>
+              </li>
+            ))}
+            {rows.bookings.map((booking) => (
+              <li key={`booking-${booking.id}`} className="rounded-sm border border-border bg-card p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-label text-[12px] text-ink-subtle">
+                    {shortDate(booking.scheduled_date)} · {booking.scheduled_time.slice(0, 5)}
+                  </p>
                   <StatusBadge status={booking.status} />
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-      </div>
+                </div>
+                <h3 className="font-display mt-2 text-2xl font-bold uppercase leading-tight text-foreground">
+                  {prettyStatus(booking.booking_type)}
+                </h3>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </PortalShell>
   );
 }

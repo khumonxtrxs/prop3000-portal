@@ -209,23 +209,32 @@ function AlertsMenu({ userId }: { userId: string | undefined }) {
   );
 }
 
+const STAT_TONES = {
+  accent: "border-t-accent",
+  primary: "border-t-primary",
+  success: "border-t-success",
+  brick: "border-t-brick",
+} as const;
+
 export function StatCard({
   label,
   value,
   hint,
   icon: Icon,
+  tone = "accent",
 }: {
   label: string;
   value: string;
   hint?: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon?: React.ComponentType<{ className?: string }>;
+  tone?: keyof typeof STAT_TONES;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-card p-5 shadow-panel">
-      <Icon className="size-5 text-accent" />
-      <p className="mt-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">{label}</p>
-      <p className="text-display mt-1 text-3xl">{value}</p>
-      {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
+    <div className={`rounded-sm border border-border border-t-4 bg-card p-6 ${STAT_TONES[tone]}`}>
+      {Icon && <Icon className="mb-3 size-5 text-accent" aria-hidden="true" />}
+      <p className="text-label text-[12px] text-ink-subtle">{label}</p>
+      <p className="font-display mt-2 text-5xl font-bold leading-none text-foreground">{value}</p>
+      {hint && <p className="mt-2 text-sm text-muted-foreground">{hint}</p>}
     </div>
   );
 }
