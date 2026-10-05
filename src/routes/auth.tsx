@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import { SiteLayout } from "@/components/site/SiteLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -183,63 +183,124 @@ function AuthPage() {
 
   return (
     <SiteLayout>
-      <div className="mx-auto max-w-md px-4 py-20">
-        <h1 className="text-display text-4xl">{mode === "signin" ? "Portal login" : "Create your account"}</h1>
-        <p className="mt-2 text-muted-foreground">Staff and clients use the same door — your view depends on your role.</p>
+      <div className="mx-auto w-full max-w-md px-4 py-16">
+        <h1 className="text-display text-5xl uppercase text-foreground">
+          {mode === "signin" ? "Sign in" : "Create account"}
+        </h1>
+        <p className="mt-2 text-muted-foreground">
+          Staff and clients use the same door — your role decides where you land.
+        </p>
 
-        <form onSubmit={submit} className="mt-8 space-y-4 rounded-xl border border-border bg-card p-6 shadow-panel">
-          {mode === "signup" && (
+        <div className="mt-6 rounded-sm border border-border border-t-[5px] border-t-primary bg-card p-6 shadow-panel">
+          <form onSubmit={submit} className="space-y-4">
+            {mode === "signup" && (
+              <div className="space-y-2">
+                <Label htmlFor="a_name" className="text-label text-[11px]">
+                  Full name
+                </Label>
+                <Input
+                  id="a_name"
+                  required
+                  maxLength={120}
+                  autoComplete="name"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                />
+              </div>
+            )}
             <div className="space-y-2">
-              <Label htmlFor="a_name">Full name</Label>
-              <Input id="a_name" required maxLength={120} value={fullName} onChange={(e) => setFullName(e.target.value)} />
+              <Label htmlFor="a_email" className="text-label text-[11px]">
+                Email
+              </Label>
+              <Input
+                id="a_email"
+                type="email"
+                required
+                autoComplete="email"
+                placeholder="you@prop3000.demo"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
             </div>
-          )}
-          <div className="space-y-2">
-            <Label htmlFor="a_email">Email</Label>
-            <Input id="a_email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="a_pass">Password</Label>
-            <Input id="a_pass" type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} />
-          </div>
-          <Button type="submit" variant="hero" size="lg" className="w-full" disabled={busy}>
-            {busy && <Loader2 className="size-4 animate-spin" />}
-            {mode === "signin" ? "Sign in" : "Sign up"}
-          </Button>
-          <Button type="button" variant="outline" size="lg" className="w-full" onClick={() => void google()}>
-            Continue with Google
-          </Button>
-          <button
-            type="button"
-            className="w-full text-sm text-muted-foreground underline-offset-4 hover:underline"
-            onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-          >
-            {mode === "signin" ? "Need an account? Sign up" : "Already have an account? Sign in"}
-          </button>
-        </form>
+            <div className="space-y-2">
+              <Label htmlFor="a_pass" className="text-label text-[11px]">
+                Password
+              </Label>
+              <Input
+                id="a_pass"
+                type="password"
+                required
+                minLength={6}
+                autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
 
-        <div className="mt-8 rounded-xl border border-dashed border-border p-6">
-          <h2 className="text-display text-xl">Try each user story</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            One click signs you in as that role so you can walk through its screens.
-          </p>
-          <div className="mt-4 space-y-2">
+            <Button
+              type="submit"
+              size="lg"
+              className="font-display w-full font-bold uppercase tracking-wide"
+              disabled={busy}
+            >
+              {busy && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
+              {mode === "signin" ? "Sign in" : "Sign up"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              className="font-display w-full bg-card font-bold uppercase tracking-wide"
+              disabled={busy}
+              onClick={() => void google()}
+            >
+              Continue with Google
+            </Button>
+            <button
+              type="button"
+              className="w-full text-sm text-muted-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
+            >
+              {mode === "signin" ? "Need an account? Sign up" : "Already have an account? Sign in"}
+            </button>
+          </form>
+
+          <div className="mt-6 flex items-center gap-3">
+            <span className="h-px flex-1 bg-divider" aria-hidden="true" />
+            <h2 className="text-label text-[11px] text-ink-subtle">Demo accounts</h2>
+            <span className="h-px flex-1 bg-divider" aria-hidden="true" />
+          </div>
+
+          <ul className="mt-4 space-y-2">
             {DEMO_ACCOUNTS.map((account) => (
-              <Button
-                key={account.email}
-                type="button"
-                variant="outline"
-                className="h-auto w-full flex-col items-start py-3 text-left"
-                disabled={busy}
-                onClick={() => void demoLogin(account.email)}
-              >
-                <span className="font-bold uppercase tracking-wide">{account.role}</span>
-                <span className="text-xs font-normal text-muted-foreground">{account.blurb}</span>
-              </Button>
+              <li key={account.email}>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void demoLogin(account.email)}
+                  className="flex w-full items-center justify-between gap-3 rounded-sm border border-border border-l-4 border-l-accent bg-background px-4 py-3 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+                >
+                  <span className="min-w-0">
+                    <span className="font-display block text-xl font-bold uppercase leading-tight text-foreground">
+                      {account.name}
+                    </span>
+                    <span className="block truncate text-sm text-muted-foreground">{account.email}</span>
+                  </span>
+                  <span className="font-display flex shrink-0 items-center gap-1 font-bold uppercase text-primary">
+                    {account.role}
+                    <ArrowRight className="size-4" aria-hidden="true" />
+                  </span>
+                </button>
+              </li>
             ))}
-          </div>
-        </div>
+          </ul>
 
+          <p className="mt-4 text-sm text-muted-foreground">
+            All demo accounts use the password{" "}
+            <span className="font-semibold text-foreground">{DEMO_PASSWORD}</span>.
+          </p>
+        </div>
       </div>
     </SiteLayout>
   );

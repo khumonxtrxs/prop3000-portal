@@ -29,7 +29,7 @@ const buttonVariants = cva(
         outlineBrick:
           "border-2 border-brick bg-transparent text-brick hover:bg-brick hover:text-brick-foreground",
         success: "bg-success text-success-foreground hover:brightness-110 active:translate-y-px",
-        whatsapp: "bg-whatsapp text-[#0B2A17] hover:brightness-105 active:translate-y-px",
+               whatsapp: "bg-whatsapp text-whatsapp-foreground hover:brightness-105 active:translate-y-px",
         ghostLight: "text-primary-foreground/80 hover:bg-primary-foreground/10 hover:text-primary-foreground",
       },
       size: {

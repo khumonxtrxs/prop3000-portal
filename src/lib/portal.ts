@@ -1,6 +1,14 @@
 import type { AppRole } from "@/hooks/useAuth";
 
-export type PortalLink = { to: string; label: string };
+export type PortalLink = { to: string; hash?: string; label: string };
+
+/** Highest role wins when a user holds more than one. */
+const ROLE_ORDER: AppRole[] = ["admin", "owner", "supervisor", "agent", "client"];
+
+/** The single role the portal is shown as: drives the chip and the tabs. */
+export function primaryRole(roles: AppRole[]): AppRole {
+  return ROLE_ORDER.find((role) => roles.includes(role)) ?? "client";
+}
 
 /** Where each signed-in role lands after login. */
 export function roleHome(roles: AppRole[]): string {
@@ -11,32 +19,34 @@ export function roleHome(roles: AppRole[]): string {
   return "/client";
 }
 
-/** Portal tabs visible to a given set of roles. */
-export function portalLinks(roles: AppRole[]): PortalLink[] {
-  const links: PortalLink[] = [];
-  if (roles.includes("admin") || roles.includes("owner")) links.push({ to: "/admin", label: "Office" });
-  if (roles.includes("owner") || roles.includes("admin")) links.push({ to: "/owner", label: "Owner analytics" });
-  if (roles.includes("supervisor") || roles.includes("admin") || roles.includes("owner"))
-    links.push({ to: "/supervisor", label: "Site supervisor" });
-  if (roles.includes("agent") || roles.includes("admin") || roles.includes("owner"))
-    links.push({ to: "/agent", label: "Agent console" });
-  links.push({ to: "/client", label: "My portal" });
-  links.push({ to: "/offers", label: "My offers" });
-  return links;
-}
-
-export const STATUS_TONE: Record<string, string> = {
-  new: "bg-secondary text-foreground",
-  contacted: "bg-accent/15 text-accent",
-  quoted: "bg-brick/15 text-brick",
-  approved: "bg-accent/20 text-accent",
-  in_progress: "bg-accent/20 text-accent",
-  converted: "bg-accent/20 text-accent",
-  complete: "bg-accent/25 text-accent",
-  declined: "bg-destructive/15 text-destructive",
-  cancelled: "bg-destructive/15 text-destructive",
-  on_hold: "bg-muted text-muted-foreground",
+/** Portal tabs per role, exactly as listed in the team task doc (S6). */
+const TABS: Record<AppRole, PortalLink[]> = {
+  client: [
+    { to: "/client", label: "My portal" },
+    { to: "/offers", label: "My offers" },
+  ],
+  admin: [
+    { to: "/admin", label: "Lead triage" },
+    { to: "/admin", hash: "jobs", label: "Jobs" },
+    { to: "/admin", hash: "bookings", label: "Bookings" },
+  ],
+  agent: [
+    { to: "/agent", label: "Offer console" },
+    { to: "/agent", hash: "listings", label: "Listings" },
+  ],
+  supervisor: [{ to: "/supervisor", label: "My jobs" }],
+  owner: [
+    { to: "/owner", label: "Analytics" },
+    { to: "/owner", hash: "leads", label: "Leads" },
+    { to: "/owner", hash: "offers", label: "Offers" },
+    { to: "/owner", hash: "jobs", label: "Jobs" },
+  ],
 };
+
+/** Portal tabs visible to a given set of roles. Each role sees only its own. */
+export function portalLinks(roles: AppRole[]): PortalLink[] {
+  return TABS[primaryRole(roles)];
+}
 
 /** Groups rows into { name, value } counts for charts. */
 export function countBy<T>(rows: T[], key: (row: T) => string) {
