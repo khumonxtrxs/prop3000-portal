@@ -71,6 +71,7 @@
   --color-on-navy-muted: var(--on-navy-muted);
   --color-on-navy-label: var(--on-navy-label);
   --color-navy-hairline: var(--navy-hairline);
+  --color-highlight: var(--highlight);
 
   /* Status badge pairs: waiting, in motion, good, bad, neutral */
   --color-status-wait: var(--status-wait);
@@ -127,6 +128,8 @@
 
   --brick: oklch(0.568 0.213 26); /* #D8232A brick red */
   --brick-foreground: oklch(1 0 0);
+
+  --highlight: oklch(0.88 0.156 90); /* #FFD24A banner emphasis yellow (Investments bands) */
 
   --destructive: oklch(0.568 0.213 26);
   --destructive-foreground: oklch(1 0 0);
