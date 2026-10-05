@@ -10,10 +10,14 @@ on:
 
 jobs:
   deploy-staging:
-    if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/chore/pipeline'
+    if: github.ref == 'refs/heads/develop'
     name: Deploy staging
     runs-on: ubuntu-latest
     environment: staging
+
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
 
     steps:
       - name: Checkout repository
@@ -52,6 +56,10 @@ jobs:
     name: Deploy production
     runs-on: ubuntu-latest
     environment: production
+
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
 
     steps:
       - name: Checkout repository
