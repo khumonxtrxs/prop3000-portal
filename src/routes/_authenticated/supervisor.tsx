@@ -2,13 +2,13 @@ import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { CalendarDays, CheckCircle2, HardHat, Images, Loader2 } from "lucide-react";
-import { CountBars } from "@/components/portal/Charts";
-import { Empty, Panel, PortalShell, StatCard, StatusPill } from "@/components/portal/PortalShell";
-import { PhotoUpload } from "@/components/PhotoUpload";
+import { Loader2 } from "lucide-react";
+import { Empty, PortalShell } from "@/components/portal/PortalShell";
+import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
+import { PhotoUpload } from "@/components/PhotoUpload";
 import {
   collection,
   doc,
@@ -22,9 +22,23 @@ import {
 } from "firebase/firestore";
 
 import { firestore } from "@/integrations/firebase/client";
-import { COLLECTIONS, SUBCOLLECTIONS } from "@/integrations/firebase/config";
+import {
+  COLLECTIONS,
+  SUBCOLLECTIONS,
+} from "@/integrations/firebase/config";
+
 import { countBy } from "@/lib/portal";
-import { JOB_STATUSES, money, prettyStatus, shortDate } from "@/lib/prop3000";
+import {
+  JOB_STATUSES,
+  money,
+  prettyStatus,
+  shortDate,
+} from "@/lib/prop3000";
+
+import {
+  statusTone,
+  type StatusTone,
+} from "@/lib/status";
 
 export const Route = createFileRoute("/_authenticated/supervisor")({
   head: () => ({
@@ -43,7 +57,6 @@ export const Route = createFileRoute("/_authenticated/supervisor")({
   component: SupervisorDashboard,
 });
 
-// Firestore Helper
 type FirestoreRow = DocumentData & {
   id: string;
 };
@@ -64,7 +77,10 @@ function timestampValue(value: unknown): number {
     return value.getTime();
   }
 
-  if (typeof value === "string" || typeof value === "number") {
+  if (
+    typeof value === "string" ||
+    typeof value === "number"
+  ) {
     const parsed = new Date(value).getTime();
     return Number.isNaN(parsed) ? 0 : parsed;
   }
@@ -72,13 +88,35 @@ function timestampValue(value: unknown): number {
   return 0;
 }
 
+const JOB_ACTIONS = [
+  "approved",
+  "in_progress",
+  "on_hold",
+  "complete",
+] as const;
+
+const BORDER_TOP: Record<StatusTone, string> = {
+  wait: "border-t-status-wait-foreground",
+  motion: "border-t-status-motion-foreground",
+  good: "border-t-status-good-foreground",
+  bad: "border-t-status-bad-foreground",
+  neutral: "border-t-status-neutral-foreground",
+};
+
 function SupervisorDashboard() {
   const { user, isStaff, isOffice, loading } = useAuth();
   const queryClient = useQueryClient();
+
   const [noteFor, setNoteFor] = useState<string | null>(null);
   const [note, setNote] = useState("");
+  const [progressDraft, setProgressDraft] = useState<Record<string, number>>({});
   const jobs = useQuery({
-    queryKey: ["supervisor-jobs", user?.uid, isOffice],
+    queryKey: [
+      "supervisor-jobs",
+      user?.uid,
+      isOffice,
+    ],
+
     enabled: !!user?.uid && isStaff,
 
     queryFn: async () => {
@@ -87,21 +125,35 @@ function SupervisorDashboard() {
       const jobsQuery = isOffice
         ? collection(db, COLLECTIONS.jobs)
         : query(
-          collection(db, COLLECTIONS.jobs),
-          where("supervisor_id", "==", user!.uid),
+          collection(
+            db,
+            COLLECTIONS.jobs,
+          ),
+          where(
+            "supervisor_id",
+            "==",
+            user!.uid,
+          ),
         );
 
-      const snapshot = await getDocs(jobsQuery);
+      const snapshot =
+        await getDocs(jobsQuery);
 
-      const rows = snapshot.docs.map((jobDoc) => ({
-        id: jobDoc.id,
-        ...jobDoc.data(),
-      })) as FirestoreRow[];
+      const rows = snapshot.docs.map(
+        (jobDoc) => ({
+          id: jobDoc.id,
+          ...jobDoc.data(),
+        }),
+      ) as FirestoreRow[];
 
       rows.sort(
         (a, b) =>
-          timestampValue(b["created_at"]) -
-          timestampValue(a["created_at"]),
+          timestampValue(
+            b["created_at"],
+          ) -
+          timestampValue(
+            a["created_at"],
+          ),
       );
 
       return rows;
@@ -109,7 +161,11 @@ function SupervisorDashboard() {
   });
 
   const history = useQuery({
-    queryKey: ["supervisor-history", jobs.data?.map((job) => job.id).join(",")],
+    queryKey: [
+      "supervisor-history",
+      jobs.data?.map((job) => job.id).join(","),
+    ],
+
     enabled: isStaff && !!jobs.data,
 
     queryFn: async () => {
@@ -144,25 +200,42 @@ function SupervisorDashboard() {
   });
 
   const bookings = useQuery({
-    queryKey: ["supervisor-bookings", user?.uid],
+    queryKey: [
+      "supervisor-bookings",
+      user?.uid,
+    ],
+
     enabled: !!user?.uid && isStaff,
 
     queryFn: async () => {
       const snapshot = await getDocs(
         query(
-          collection(firestore(), COLLECTIONS.bookings),
-          where("assigned_to", "==", user!.uid),
+          collection(
+            firestore(),
+            COLLECTIONS.bookings,
+          ),
+          where(
+            "assigned_to",
+            "==",
+            user!.uid,
+          ),
         ),
       );
 
-      const rows = snapshot.docs.map((bookingDoc) => ({
-        id: bookingDoc.id,
-        ...bookingDoc.data(),
-      })) as FirestoreRow[];
+      const rows = snapshot.docs.map(
+        (bookingDoc) => ({
+          id: bookingDoc.id,
+          ...bookingDoc.data(),
+        }),
+      ) as FirestoreRow[];
 
       rows.sort((a, b) =>
-        String(a["scheduled_date"] ?? "").localeCompare(
-          String(b["scheduled_date"] ?? ""),
+        String(
+          a["scheduled_date"] ?? "",
+        ).localeCompare(
+          String(
+            b["scheduled_date"] ?? "",
+          ),
         ),
       );
 
@@ -180,11 +253,14 @@ function SupervisorDashboard() {
       const patch: {
         status?: string;
         progress?: number;
-        completed_at?: ReturnType<typeof serverTimestamp> | null;
+        completed_at?:
+        | ReturnType<typeof serverTimestamp>
+        | null;
       } = {};
 
       if (input.status) {
         patch.status = input.status;
+
         patch.completed_at =
           input.status === "complete"
             ? serverTimestamp()
@@ -206,7 +282,10 @@ function SupervisorDashboard() {
         );
       }
 
-      if (input.status || input.note?.trim()) {
+      if (
+        input.status ||
+        input.note?.trim()
+      ) {
         const historyRef = doc(
           collection(
             firestore(),
@@ -217,10 +296,14 @@ function SupervisorDashboard() {
         );
 
         await setDoc(historyRef, {
-          status: input.status ?? "note",
-          note: input.note?.trim() || null,
+          status:
+            input.status ?? "note",
+          note:
+            input.note?.trim() ||
+            null,
           changed_by: user!.uid,
-          created_at: serverTimestamp(),
+          created_at:
+            serverTimestamp(),
         });
       }
     },
@@ -235,15 +318,21 @@ function SupervisorDashboard() {
 
       await Promise.all([
         queryClient.invalidateQueries({
-          queryKey: ["supervisor-jobs"],
+          queryKey: [
+            "supervisor-jobs",
+          ],
         }),
+
         queryClient.invalidateQueries({
-          queryKey: ["supervisor-history"],
+          queryKey: [
+            "supervisor-history",
+          ],
         }),
       ]);
     },
 
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) =>
+      toast.error(e.message),
   });
 
   const savePhotos = useMutation({
@@ -279,17 +368,17 @@ function SupervisorDashboard() {
       toast.error(e.message),
   });
 
-  if (loading || jobs.isLoading) {
+  if (loading || (isStaff && jobs.isLoading)) {
     return (
-      <PortalShell badge="Site" title="Supervisor board" subtitle="Loading your jobs…">
-        <Loader2 className="mx-auto size-6 animate-spin text-accent" />
+      <PortalShell title="My jobs" subtitle="Loading your jobs…">
+        <Loader2 className="mx-auto size-6 animate-spin text-accent" aria-label="Loading" />
       </PortalShell>
     );
   }
 
   if (!isStaff) {
     return (
-      <PortalShell badge="Site" title="Supervisors only" subtitle="This board is for site supervisors and office staff.">
+      <PortalShell title="Supervisors only" subtitle="This board is for site supervisors and office staff.">
         <Empty>Ask an admin to grant you the supervisor role.</Empty>
       </PortalShell>
     );
@@ -317,149 +406,319 @@ function SupervisorDashboard() {
   }
 
   const rows = jobs.data ?? [];
-  const active = rows.filter((j) => j["status"] === "in_progress").length;
-  const done = rows.filter((j) => j["status"] === "complete").length;
-  const avgProgress = rows.length ? Math.round(rows.reduce((s, j) => s + j["progress"], 0) / rows.length) : 0;
+  const active = rows.filter(
+    (job) => job["status"] === "in_progress",
+  ).length;
+
+  const done = rows.filter(
+    (job) => job["status"] === "complete",
+  ).length;
+
+  const avgProgress = rows.length
+    ? Math.round(
+      rows.reduce(
+        (sum, job) =>
+          sum + Number(job["progress"] ?? 0),
+        0,
+      ) / rows.length,
+    )
+    : 0;
 
   return (
     <PortalShell
-      badge="Site supervisor / foreman"
-      title="Supervisor board"
-      subtitle="Your assigned jobs. Move the status, push the progress slider and upload site photos — the office and the client see it instantly."
+      title="My jobs"
+      subtitle={`${active} job${active === 1 ? "" : "s"} in progress · ${rows.length
+        } assigned to you. Update status, progress and photos.`}
     >
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard icon={HardHat} label="Assigned jobs" value={String(rows.length)} />
-        <StatCard icon={Loader2} label="In progress" value={String(active)} />
-        <StatCard icon={CheckCircle2} label="Completed" value={String(done)} />
-        <StatCard icon={CalendarDays} label="Avg progress" value={`${avgProgress}%`} />
-      </div>
+      {rows.length === 0 ? (
+        <Empty>
+          No jobs assigned to you yet. The office assigns jobs when a lead is
+          converted.
+        </Empty>
+      ) : (
+        <ul className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,340px),1fr))] items-start gap-5">
+          {rows.map((job) => {
+            const currentProgress = Number(job["progress"] ?? 0);
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-2">
-        <Panel title="My jobs by status">
-          <CountBars data={countBy(rows, (j) => j["status"])} label="Jobs" />
-        </Panel>
-        <Panel title="Site visits assigned to me">
-          {(bookings.data ?? []).length === 0 ? (
-            <Empty>No site visits booked for you yet.</Empty>
-          ) : (
-            <ul className="divide-y divide-border text-sm">
-              {(bookings.data ?? []).map((booking) => (
-                <li key={booking.id} className="flex items-start justify-between gap-3 py-3">
-                  <div>
-                    <p className="font-semibold">{prettyStatus(booking["booking_type"])}</p>
-                    <p className="text-muted-foreground">
-                      {booking["full_name"]} · {booking["address"] ?? "no address"}
+            const progress =
+              progressDraft[job.id] ?? currentProgress;
+
+            const jobHistory = (history.data ?? []).filter(
+              (entry) => entry["job_id"] === job.id,
+            );
+
+            const commitProgress = () => {
+              if (progress !== currentProgress) {
+                update.mutate({
+                  id: job.id,
+                  progress,
+                });
+              }
+            };
+
+            return (
+              <li
+                key={job.id}
+                className={`rounded-sm border border-border border-t-4 bg-card p-6 ${BORDER_TOP[
+                  statusTone(
+                    String(job["status"] ?? ""),
+                  )
+                ]
+                  }`}
+              >
+                {/* Job heading */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-label text-[12px] text-ink-subtle">
+                      {String(job["reference"] ?? "")}
+                      {" · "}
+                      {String(job["client_name"] ?? "")}
+                    </p>
+
+                    <h2 className="font-display mt-1 text-2xl font-bold uppercase leading-tight text-foreground">
+                      {String(job["title"] ?? "Job")}
+                    </h2>
+
+                    <p className="mt-1 text-muted-foreground">
+                      {String(job["address"] ?? "")}
                     </p>
                   </div>
-                  <span className="text-xs font-semibold text-muted-foreground">
-                    {shortDate(booking["scheduled_date"])} · {String(booking["scheduled_time"] ?? "").slice(0, 5)}
+
+                  <StatusBadge
+                    status={String(job["status"] ?? "")}
+                  />
+                </div>
+
+                {/* Quote */}
+                <div className="mt-5 flex items-end justify-between gap-3">
+                  <span className="text-label text-[12px] text-ink-subtle">
+                    Quote
                   </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-      </div>
 
-      <div className="mt-8 grid gap-6">
-        {rows.length === 0 ? (
-          <Empty>No jobs assigned to you yet. The office assigns jobs when a lead is converted.</Empty>
-        ) : (
-          rows.map((job) => (
-            <Panel key={job.id} title={job["title"]} action={<StatusPill status={job["status"]} />}>
-              <p className="text-sm text-muted-foreground">
-                {job["address"]} · {job["client_name"]} · {job["reference"]} · {money(job["quote_amount"])}
-              </p>
-
-              <div className="mt-4">
-                <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                  <span>Progress</span>
-                  <span>{job["progress"]}%</span>
+                  <span className="font-display text-3xl font-bold leading-none text-primary">
+                    {money(
+                      Number(
+                        job["quote_amount"] ?? 0,
+                      ),
+                    )}
+                  </span>
                 </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  step={5}
-                  defaultValue={job["progress"]}
-                  className="mt-2 w-full accent-accent"
-                  aria-label={`Progress for ${job["title"]}`}
-                  onMouseUp={(e) => update.mutate({ id: job.id, progress: Number(e.currentTarget.value) })}
-                  onTouchEnd={(e) => update.mutate({ id: job.id, progress: Number(e.currentTarget.value) })}
-                />
-              </div>
 
-              <div className="mt-4 flex flex-wrap gap-2">
-                {JOB_STATUSES.map((status) => (
-                  <Button
-                    key={status.value}
-                    size="sm"
-                    variant={job["status"] === status.value ? "accent" : "outline"}
-                    disabled={update.isPending}
-                    onClick={() => update.mutate({ id: job.id, status: status.value })}
-                  >
-                    {status.label}
-                  </Button>
-                ))}
-                <Button size="sm" variant="brick" onClick={() => setNoteFor(noteFor === job.id ? null : job.id)}>
-                  Add site note
-                </Button>
-              </div>
+                {/* Progress */}
+                <div className="mt-4">
+                  <div className="flex items-center justify-between">
+                    <label
+                      htmlFor={`progress-${job.id}`}
+                      className="text-label text-[12px] text-ink-subtle"
+                    >
+                      Progress
+                    </label>
 
-              {noteFor === job.id && (
-                <div className="mt-3 space-y-2 rounded-lg border border-border bg-secondary/40 p-4">
-                  <Textarea
-                    rows={2}
-                    maxLength={500}
-                    placeholder="What happened on site today?"
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                  />
-                  <Button size="sm" variant="accent" disabled={update.isPending} onClick={() => update.mutate({ id: job.id, note })}>
-                    Save note
-                  </Button>
-                </div>
-              )}
-
-              <div className="mt-5 rounded-lg border border-dashed border-border p-4">
-                <p className="flex items-center gap-2 text-sm font-semibold">
-                  <Images className="size-4 text-accent" /> Site photos
-                </p>
-                <div className="mt-3">
-                  <PhotoUpload
-                    bucket="job-photos"
-                    prefix={job.id}
-                    paths={[]}
-                    label="Upload progress photos"
-                    hint="Compressed on your phone first — works on weak site signal."
-                    onChange={(paths) => {
-                      if (paths.length > 0) savePhotos.mutate({ jobId: job.id, paths });
-                    }}
-                  />
-                </div>
-              </div>
-            </Panel>
-          ))
-        )}
-
-        <Panel title="Recent site updates">
-          {(history.data ?? []).length === 0 ? (
-            <Empty>No status updates logged yet.</Empty>
-          ) : (
-            <ul className="divide-y divide-border text-sm">
-              {(history.data ?? []).map((entry) => (
-                <li key={entry.id} className="flex items-start justify-between gap-3 py-3">
-                  <div>
-                    <p className="font-semibold">{prettyStatus(entry["status"])}</p>
-                    {entry["note"] && <p className="text-muted-foreground">{entry["note"]}</p>}
+                    <span className="text-label text-[12px] text-ink-subtle">
+                      {progress}%
+                    </span>
                   </div>
-                  <span className="text-xs text-muted-foreground">{shortDate(entry["created_at"])}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-      </div>
+
+                  <div
+                    className="mt-2 h-2 overflow-hidden rounded-sm bg-secondary"
+                    aria-hidden="true"
+                  >
+                    <div
+                      className="h-full bg-accent transition-all"
+                      style={{
+                        width: `${progress}%`,
+                      }}
+                    />
+                  </div>
+
+                  <input
+                    id={`progress-${job.id}`}
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={progress}
+                    className="mt-3 w-full accent-accent"
+                    onChange={(e) =>
+                      setProgressDraft(
+                        (current) => ({
+                          ...current,
+                          [job.id]: Number(
+                            e.target.value,
+                          ),
+                        }),
+                      )
+                    }
+                    onPointerUp={commitProgress}
+                    onKeyUp={commitProgress}
+                  />
+                </div>
+
+                {/* Job status actions */}
+                <div
+                  className="mt-4 flex flex-wrap gap-2"
+                  role="group"
+                  aria-label={`Status for ${String(
+                    job["reference"] ?? "",
+                  )}`}
+                >
+                  {JOB_ACTIONS.map((status) => (
+                    <Button
+                      key={status}
+                      size="sm"
+                      variant={
+                        job["status"] === status
+                          ? "default"
+                          : "outline"
+                      }
+                      aria-pressed={
+                        job["status"] === status
+                      }
+                      className="font-display font-bold uppercase tracking-wide"
+                      disabled={
+                        update.isPending ||
+                        job["status"] === status
+                      }
+                      onClick={() =>
+                        update.mutate({
+                          id: job.id,
+                          status,
+                        })
+                      }
+                    >
+                      {prettyStatus(status)}
+                    </Button>
+                  ))}
+                </div>
+
+                {/* Firebase photo upload */}
+                <div className="mt-5 rounded-sm border border-dashed border-border p-4">
+                  <p className="text-label text-[12px] text-ink-subtle">
+                    Site photos
+                  </p>
+
+                  <div className="mt-3">
+                    <PhotoUpload
+                      bucket="job-photos"
+                      prefix={job.id}
+                      paths={[]}
+                      label="Upload progress photos"
+                      hint="Compressed on your phone first — works on weak site signal."
+                      onChange={(paths) => {
+                        if (paths.length > 0) {
+                          savePhotos.mutate({
+                            jobId: job.id,
+                            paths,
+                          });
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Site note */}
+                {noteFor !== job.id ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="mt-4 font-display font-bold uppercase tracking-wide"
+                    onClick={() => {
+                      setNote("");
+                      setNoteFor(job.id);
+                    }}
+                  >
+                    Add site note
+                  </Button>
+                ) : (
+                  <form
+                    className="mt-4 flex gap-2"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+
+                      if (!note.trim()) {
+                        return;
+                      }
+
+                      update.mutate({
+                        id: job.id,
+                        note: note.trim(),
+                      });
+                    }}
+                  >
+                    <Input
+                      aria-label={`Site note for ${String(
+                        job["reference"] ?? "",
+                      )}`}
+                      className="h-11"
+                      maxLength={500}
+                      placeholder="Site note for the history…"
+                      value={note}
+                      onChange={(e) =>
+                        setNote(e.target.value)
+                      }
+                    />
+
+                    <Button
+                      type="submit"
+                      className="font-display h-11 font-bold uppercase tracking-wide"
+                      disabled={
+                        update.isPending ||
+                        !note.trim()
+                      }
+                    >
+                      Log
+                    </Button>
+                  </form>
+                )}
+
+                {/* Firebase status history */}
+                {jobHistory.length > 0 && (
+                  <div className="mt-4 border-t border-divider pt-4">
+                    <h3 className="text-label text-[12px] text-ink-subtle">
+                      Status history
+                    </h3>
+
+                    <ol className="mt-2 space-y-1.5">
+                      {jobHistory.map((entry) => (
+                        <li
+                          key={entry.id}
+                          className="flex justify-between gap-3 text-sm"
+                        >
+                          <span>
+                            <span className="font-semibold text-primary">
+                              {prettyStatus(
+                                String(
+                                  entry["status"] ??
+                                  "",
+                                ),
+                              )}
+                            </span>
+
+                            {entry["note"] && (
+                              <span className="ml-3 text-muted-foreground">
+                                {String(
+                                  entry["note"],
+                                )}
+                              </span>
+                            )}
+                          </span>
+
+                          <span className="shrink-0 text-ink-faint">
+                            {shortDate(
+                              entry["created_at"],
+                            )}
+                          </span>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </PortalShell>
   );
 }

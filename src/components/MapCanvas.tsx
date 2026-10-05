@@ -7,6 +7,9 @@ export type MapPin = {
   lat: number;
   lng: number;
   label?: string | undefined;
+  /** Short text shown on the pin itself, e.g. "R890k". */
+  text?: string | undefined;
+  active?: boolean | undefined;
   kind?: "site" | "office" | "listing" | undefined;
 };
 
@@ -18,10 +21,14 @@ type Props = {
   onPinClick?: ((index: number) => void) | undefined;
 };
 
-const COLORS: Record<string, string> = {
-  office: "#1b3a7a",
-  site: "#f2a127",
-  listing: "#b4472e",
+/** Full class strings so Tailwind generates them; colours are design tokens only. */
+const PIN_CLASSES = {
+  label:
+    "font-display cursor-pointer whitespace-nowrap rounded-sm border-2 border-card bg-primary px-2 py-1 text-sm font-bold text-primary-foreground shadow-panel focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+  labelActive:
+    "font-display cursor-pointer whitespace-nowrap rounded-sm border-2 border-card bg-accent px-2 py-1 text-sm font-bold text-accent-foreground shadow-panel focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+  office: "size-4 cursor-pointer rounded-full border-2 border-card bg-primary-deep shadow-panel",
+  site: "size-5 cursor-pointer rounded-full border-2 border-card bg-accent shadow-panel",
 };
 
 /** Browser-only Mapbox map. Render inside <ClientOnly> or a lazy boundary. */
@@ -69,17 +76,18 @@ export default function MapCanvas({ pins, path, className, zoom = 12, onPinClick
       const el = document.createElement("button");
       el.type = "button";
       el.setAttribute("aria-label", pin.label ?? "Map location");
-      el.style.cssText = `width:${pin.kind === "office" ? 16 : 20}px;height:${
-        pin.kind === "office" ? 16 : 20
-      }px;border-radius:9999px;border:2px solid #fff;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.35);background:${
-        COLORS[pin.kind ?? "site"] ?? COLORS["site"]
-      }`;
+      if (pin.text) {
+        el.className = pin.active ? PIN_CLASSES.labelActive : PIN_CLASSES.label;
+        el.textContent = pin.text;
+      } else {
+        el.className = pin.kind === "office" ? PIN_CLASSES.office : PIN_CLASSES.site;
+      }
       el.addEventListener("click", (event) => {
         event.stopPropagation();
         onPinClick?.(index);
       });
       const marker = new mapboxgl.Marker({ element: el }).setLngLat([pin.lng, pin.lat]);
-      if (pin.label) marker.setPopup(new mapboxgl.Popup({ offset: 16 }).setText(pin.label));
+      if (pin.label && !onPinClick) marker.setPopup(new mapboxgl.Popup({ offset: 16 }).setText(pin.label));
       marker.addTo(map);
       return marker;
     });
@@ -98,13 +106,16 @@ export default function MapCanvas({ pins, path, className, zoom = 12, onPinClick
       };
       if (existing) existing.setData(geojson);
       else {
+        // Mapbox paints on a canvas and can't read CSS tokens, so the colour comes from --map-route in styles.css.
+        const routeColour =
+          getComputedStyle(document.documentElement).getPropertyValue("--map-route").trim() || "orange";
         map.addSource("route", { type: "geojson", data: geojson });
         map.addLayer({
           id: "route",
           type: "line",
           source: "route",
           layout: { "line-cap": "round", "line-join": "round" },
-          paint: { "line-color": "#f2a127", "line-width": 5 },
+          paint: { "line-color": routeColour, "line-width": 5 },
         });
       }
     };
@@ -126,17 +137,19 @@ export default function MapCanvas({ pins, path, className, zoom = 12, onPinClick
     } else if (points[0]) {
       map.easeTo({ center: points[0], zoom });
     }
-  }, [pins, path, zoom]);
+    // Refit only when the set of locations changes, not when a pin is highlighted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pins.map((p) => `${p.lat},${p.lng}`).join("|"), path, zoom]);
 
   if (error) {
     return (
       <div
-        className={`flex items-center justify-center rounded-lg border border-border bg-muted text-sm text-muted-foreground ${className ?? "h-64"}`}
+        className={`flex items-center justify-center rounded-sm border border-border bg-muted text-sm text-muted-foreground ${className ?? "h-64"}`}
       >
         {error}
       </div>
     );
   }
 
-  return <div ref={holder} className={`overflow-hidden rounded-lg border border-border ${className ?? "h-64"}`} />;
+  return <div ref={holder} className={`overflow-hidden rounded-sm border border-border ${className ?? "h-64"}`} />;
 }
