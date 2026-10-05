@@ -176,6 +176,9 @@
   --sidebar-accent-foreground: oklch(1 0 0);
   --sidebar-border: oklch(0.335 0.079 257.9);
   --sidebar-ring: oklch(0.754 0.165 62.8);
+
+  /* Mapbox paints on a canvas and can't parse oklch, so the route line reads this rgb copy of --accent. */
+  --map-route: rgb(247, 148, 29); /* #F7941D */
 }
 
 
