@@ -10,7 +10,7 @@ on:
 
 jobs:
   deploy-staging:
-    if: github.ref == 'refs/heads/develop'
+    if: github.ref == 'refs/heads/develop' || github.event_name == 'workflow_dispatch'
     name: Deploy staging
     runs-on: ubuntu-latest
     environment: staging
