@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "emulators": "node scripts/emulators.mjs",
     "seed:demo-users": "node scripts/seed-demo-users.mjs",
+    "seed:demo-data": "node scripts/seed-demo-data.mjs",
     "test:rules": "node --test scripts/test-rules.mjs",
     "lint": "eslint .",
     "format": "prettier --write ."
