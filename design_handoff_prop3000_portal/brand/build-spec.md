@@ -1,6 +1,6 @@
 # Prop3000 Portal — Complete Build Specification
 
-Paste this document (plus the attached `prop3000-portal-source.zip`) into Claude to rebuild the app exactly. The zip contains every source file; this document explains the architecture, schema, roles, and behavior so Claude can reconstruct or extend it faithfully.
+This document, together with the source archive, describes the app in full. The archive contains every source file; this document explains the architecture, schema, roles and behaviour so the build can be reconstructed or extended faithfully.
 
 ---
 
@@ -104,7 +104,7 @@ Each dashboard uses `PortalShell` (role badge header + shared nav tabs from `por
 9. TypeScript strict flags include `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess`.
 10. Every route has its own `head()` with unique title/description/og tags.
 
-## 7. Rebuild Checklist for Claude
+## 7. Rebuild Checklist
 
 1. Scaffold TanStack Start + Tailwind v4 + shadcn; copy `src/styles.css` tokens verbatim.
 2. Run migrations in order (in zip under `supabase/migrations/`), then the demo-data seed.

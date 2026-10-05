@@ -503,7 +503,6 @@ states (counter panels, confirmations, notification popover, toasts).
 ## Files in this bundle
 
 ```
-CLAUDE_CODE_PROMPT.md                    ← paste into Claude Code to start
 README.md                                ← this file
 screenshots/                             ← 17 captures, one per screen
 brand/prop3000-logo.png
