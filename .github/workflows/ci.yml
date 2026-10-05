@@ -15,8 +15,7 @@ on:
 
 jobs:
   build:
-    # name: Lint, types and build
-    name: Lint and build
+    name: Lint, types and build
     runs-on: ubuntu-latest
 
     steps:
@@ -35,9 +34,8 @@ jobs:
       - name: Run ESLint
         run: npm run lint
 
-      # Will error out until firebase migration is complete
-      # - name: Type check
-      #   run: npx tsc --noEmit
+      - name: Type check
+        run: npx tsc --noEmit
 
       - name: Build application
         run: npm run build

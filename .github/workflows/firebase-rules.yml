@@ -38,7 +38,7 @@ jobs:
       - name: Deploy Firebase rules
         run: >
           npx firebase deploy
-          --only firestore:rules,storage:rules
+          --only firestore:rules,storage
           --project "$FIREBASE_PROJECT"
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
