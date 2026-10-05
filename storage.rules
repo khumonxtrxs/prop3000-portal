@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// Storage rules for the Prop3000 Portal, mirroring the Supabase storage policies.
+// Storage rules for the Prop3000 Portal.
 //
 // lead-photos/ — photos attached to a public form submission. Anyone may upload, only staff read.
 // job-photos/  — progress photos on a job. Staff upload, job participants read.
@@ -12,47 +12,72 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    function roles() {
-      return firestore.exists(/databases/(default)/documents/user_roles/$(request.auth.uid))
-        ? firestore.get(/databases/(default)/documents/user_roles/$(request.auth.uid)).data.roles
-        : [];
+    function userRole() {
+      return signedIn()
+        && firestore.exists(
+          /databases/(default)/documents/user_roles/$(request.auth.uid)
+        )
+          ? firestore.get(
+              /databases/(default)/documents/user_roles/$(request.auth.uid)
+            ).data.role
+          : null;
     }
 
     function hasRole(role) {
-      return signedIn() && role in roles();
+      return signedIn() && userRole() == role;
     }
 
     function isStaff() {
-      return hasRole('admin') || hasRole('owner') || hasRole('supervisor') || hasRole('agent');
+      return hasRole('admin')
+        || hasRole('owner')
+        || hasRole('supervisor')
+        || hasRole('agent');
     }
 
     function isOffice() {
       return hasRole('admin') || hasRole('owner');
     }
 
-    // Images only, 10 MB ceiling. The upload component compresses on the phone first.
+    // Images only, 10 MB ceiling.
+    // The upload component compresses images before uploading.
     function isAllowedImage() {
       return request.resource.contentType.matches('image/.*')
         && request.resource.size < 10 * 1024 * 1024;
     }
 
-    match /lead-photos/{fileName} {
+    // Recursive path because uploads are stored as:
+    // lead-photos/requests/2026/<uuid>.jpg
+    // lead-photos/properties/2026/<uuid>.jpg
+    match /lead-photos/{allPaths=**} {
       allow create: if isAllowedImage();
+
       allow read: if isStaff();
+
       allow update: if false;
+
       allow delete: if isOffice();
     }
 
+    // Stored as:
+    // job-photos/{jobId}/{fileName}
     match /job-photos/{jobId}/{fileName} {
+
       function jobDoc() {
-        return firestore.get(/databases/(default)/documents/jobs/$(jobId)).data;
+        return firestore.get(
+          /databases/(default)/documents/jobs/$(jobId)
+        ).data;
       }
 
-      allow create: if isStaff() && isAllowedImage();
+      allow create: if isStaff()
+        && isAllowedImage();
+
       allow read: if signedIn() && (
-        isStaff() || jobDoc().client_id == request.auth.uid
+        isStaff()
+        || jobDoc().client_id == request.auth.uid
       );
+
       allow update: if false;
+
       allow delete: if isStaff();
     }
 

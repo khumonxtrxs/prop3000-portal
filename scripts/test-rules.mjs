@@ -60,12 +60,12 @@ before(async () => {
   // Seed roles and fixtures with rules disabled.
   await testEnv.withSecurityRulesDisabled(async (context) => {
     const seed = context.firestore();
-    await setDoc(doc(seed, "user_roles", UID.admin), { roles: ["admin"] });
-    await setDoc(doc(seed, "user_roles", UID.supervisor), { roles: ["supervisor"] });
-    await setDoc(doc(seed, "user_roles", UID.otherSupervisor), { roles: ["supervisor"] });
-    await setDoc(doc(seed, "user_roles", UID.agent), { roles: ["agent"] });
-    await setDoc(doc(seed, "user_roles", UID.owner), { roles: ["owner"] });
-    await setDoc(doc(seed, "user_roles", UID.client), { roles: ["client"] });
+    await setDoc(doc(seed, "user_roles", UID.admin), { role: "admin" });
+    await setDoc(doc(seed, "user_roles", UID.supervisor), { role: "supervisor" });
+    await setDoc(doc(seed, "user_roles", UID.otherSupervisor), { role: "supervisor" });
+    await setDoc(doc(seed, "user_roles", UID.agent), { role: "agent" });
+    await setDoc(doc(seed, "user_roles", UID.owner), { role: "owner" });
+    await setDoc(doc(seed, "user_roles", UID.client), { role: "client" });
 
     await setDoc(doc(seed, "service_requests", "sr-1"), {
       client_id: UID.client,
@@ -168,7 +168,10 @@ describe("clients", () => {
   });
 
   it("cannot grant itself a role", async () => {
-    await assertFails(setDoc(doc(db(UID.client), "user_roles", UID.client), { roles: ["admin"] }));
+    // await assertFails(setDoc(doc(db(UID.client), "user_roles", UID.client), { roles: ["admin"] }));
+    await assertFails(
+      setDoc(doc(db(UID.client), "user_roles", UID.client), { role: "admin" }),
+    );
   });
 });
 

@@ -12,7 +12,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+
+import {
+  collection,
+  doc,
+  serverTimestamp,
+  setDoc,
+} from "firebase/firestore";
+
+import { firestore } from "@/integrations/firebase/client";
+import { COLLECTIONS } from "@/integrations/firebase/config";
 import { getPublicListing } from "@/lib/listings.functions";
 import { COMPANY, money, prettyStatus } from "@/lib/prop3000";
 
@@ -29,9 +38,8 @@ export const Route = createFileRoute("/listings/$id")({
       { title: `${loaderData?.title ?? "Property"} — Prop3000 Investments` },
       {
         name: "description",
-        content: `${loaderData?.title ?? "Distressed property"} in ${loaderData?.suburb ?? "Cape Town"} — asking ${
-          loaderData ? money(Number(loaderData.price)) : "POA"
-        }. Submit an offer online with Prop3000 Investments.`,
+        content: `${loaderData?.title ?? "Distressed property"} in ${loaderData?.suburb ?? "Cape Town"} — asking ${loaderData ? money(Number(loaderData.price)) : "POA"
+          }. Submit an offer online with Prop3000 Investments.`,
       },
       { property: "og:title", content: `${loaderData?.title ?? "Property"} — Prop3000 Investments` },
       { property: "og:description", content: loaderData?.description ?? "Distressed property for sale, as-is." },
@@ -60,7 +68,7 @@ export const Route = createFileRoute("/listings/$id")({
 function ListingDetail() {
   const { id } = Route.useParams();
   const { data: listing } = useSuspenseQuery(listingQuery(id));
-  const { session, user } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [amount, setAmount] = useState("");
   const [phone, setPhone] = useState("");
@@ -90,32 +98,74 @@ function ListingDetail() {
 
   async function submitOffer(event: React.FormEvent) {
     event.preventDefault();
+
+    if (!user) {
+      toast.error("Sign in to submit an offer.");
+      return;
+    }
+
+    if (!listing) {
+      toast.error("This listing is no longer available.");
+      return;
+    }
+
     const value = Number(amount.replace(/[^\d]/g, ""));
+
     if (!value || value < 1000) {
       toast.error("Enter your offer amount in rands.");
       return;
     }
+
     setBusy(true);
-    const { data, error } = await supabase
-      .from("offers")
-      .insert({
-        listing_id: listing!.id,
-        client_id: user!.id,
-        client_name: (user!.user_metadata?.["full_name"] as string) || user!.email || "Client",
-        client_email: user!.email ?? "",
+
+    try {
+      const offerRef = doc(
+        collection(firestore(), COLLECTIONS.offers),
+      );
+
+      await setDoc(offerRef, {
+        reference: offerRef.id,
+
+        listing_id: listing.id,
+        listing_title: listing.title,
+        listing_address: listing.address,
+        asking_price: Number(listing.price),
+
+        client_id: user.uid,
+        buyer_name:
+          user.displayName ||
+          user.email ||
+          "Client",
+        client_email: user.email ?? "",
         client_phone: phone.trim() || null,
+
         amount: value,
         message: message.trim() || null,
-      })
-      .select("reference")
-      .single();
-    setBusy(false);
-    if (error) {
-      toast.error(error.message);
-      return;
+
+        status: "pending",
+        counter_amount: null,
+        agent_notes: null,
+
+        agent_name: listing.agent_name ?? null,
+
+        created_at: serverTimestamp(),
+      });
+
+      setSent(offerRef.id);
+      toast.success(
+        "Offer submitted — the agent has been notified.",
+      );
+    } catch (error) {
+      console.error(error);
+
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not submit offer.",
+      );
+    } finally {
+      setBusy(false);
     }
-    setSent(data.reference);
-    toast.success("Offer submitted — the agent has been notified.");
   }
 
   return (
@@ -181,7 +231,7 @@ function ListingDetail() {
                     <Link to="/offers">Track my offers</Link>
                   </Button>
                 </div>
-              ) : session ? (
+              ) : user ? (
                 <form onSubmit={submitOffer} className="mt-4 space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="o_amount">Your offer (R)</Label>

@@ -9,7 +9,20 @@ import { PhotoUpload } from "@/components/PhotoUpload";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  collection,
+  doc,
+  getDocs,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  where,
+  type DocumentData,
+} from "firebase/firestore";
+
+import { firestore } from "@/integrations/firebase/client";
+import { COLLECTIONS, SUBCOLLECTIONS } from "@/integrations/firebase/config";
 import { countBy } from "@/lib/portal";
 import { JOB_STATUSES, money, prettyStatus, shortDate } from "@/lib/prop3000";
 
@@ -30,99 +43,240 @@ export const Route = createFileRoute("/_authenticated/supervisor")({
   component: SupervisorDashboard,
 });
 
+// Firestore Helper
+type FirestoreRow = DocumentData & {
+  id: string;
+};
+
+function timestampValue(value: unknown): number {
+  if (!value) return 0;
+
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "toMillis" in value &&
+    typeof (value as { toMillis?: unknown }).toMillis === "function"
+  ) {
+    return (value as { toMillis: () => number }).toMillis();
+  }
+
+  if (value instanceof Date) {
+    return value.getTime();
+  }
+
+  if (typeof value === "string" || typeof value === "number") {
+    const parsed = new Date(value).getTime();
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+
+  return 0;
+}
+
 function SupervisorDashboard() {
   const { user, isStaff, isOffice, loading } = useAuth();
   const queryClient = useQueryClient();
   const [noteFor, setNoteFor] = useState<string | null>(null);
   const [note, setNote] = useState("");
-
   const jobs = useQuery({
-    queryKey: ["supervisor-jobs", user?.id, isOffice],
-    enabled: !!user?.id && isStaff,
+    queryKey: ["supervisor-jobs", user?.uid, isOffice],
+    enabled: !!user?.uid && isStaff,
+
     queryFn: async () => {
-      let query = supabase.from("jobs").select("*").order("created_at", { ascending: false });
-      if (!isOffice) query = query.eq("supervisor_id", user!.id);
-      const { data, error } = await query;
-      if (error) throw error;
-      return data;
+      const db = firestore();
+
+      const jobsQuery = isOffice
+        ? collection(db, COLLECTIONS.jobs)
+        : query(
+          collection(db, COLLECTIONS.jobs),
+          where("supervisor_id", "==", user!.uid),
+        );
+
+      const snapshot = await getDocs(jobsQuery);
+
+      const rows = snapshot.docs.map((jobDoc) => ({
+        id: jobDoc.id,
+        ...jobDoc.data(),
+      })) as FirestoreRow[];
+
+      rows.sort(
+        (a, b) =>
+          timestampValue(b["created_at"]) -
+          timestampValue(a["created_at"]),
+      );
+
+      return rows;
     },
   });
 
   const history = useQuery({
-    queryKey: ["supervisor-history"],
-    enabled: isStaff,
+    queryKey: ["supervisor-history", jobs.data?.map((job) => job.id).join(",")],
+    enabled: isStaff && !!jobs.data,
+
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("job_status_history")
-        .select("id, job_id, status, note, created_at")
-        .order("created_at", { ascending: false })
-        .limit(15);
-      if (error) throw error;
-      return data;
+      const allRows = await Promise.all(
+        (jobs.data ?? []).map(async (job) => {
+          const snapshot = await getDocs(
+            collection(
+              firestore(),
+              COLLECTIONS.jobs,
+              job.id,
+              SUBCOLLECTIONS.jobStatusHistory,
+            ),
+          );
+
+          return snapshot.docs.map((historyDoc) => ({
+            id: historyDoc.id,
+            job_id: job.id,
+            ...historyDoc.data(),
+          })) as FirestoreRow[];
+        }),
+      );
+
+      return allRows
+        .flat()
+        .sort(
+          (a, b) =>
+            timestampValue(b["created_at"]) -
+            timestampValue(a["created_at"]),
+        )
+        .slice(0, 15);
     },
   });
 
   const bookings = useQuery({
-    queryKey: ["supervisor-bookings", user?.id],
-    enabled: !!user?.id && isStaff,
+    queryKey: ["supervisor-bookings", user?.uid],
+    enabled: !!user?.uid && isStaff,
+
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("bookings")
-        .select("id, booking_type, full_name, address, scheduled_date, scheduled_time, status")
-        .eq("assigned_to", user!.id)
-        .order("scheduled_date", { ascending: true });
-      if (error) throw error;
-      return data;
+      const snapshot = await getDocs(
+        query(
+          collection(firestore(), COLLECTIONS.bookings),
+          where("assigned_to", "==", user!.uid),
+        ),
+      );
+
+      const rows = snapshot.docs.map((bookingDoc) => ({
+        id: bookingDoc.id,
+        ...bookingDoc.data(),
+      })) as FirestoreRow[];
+
+      rows.sort((a, b) =>
+        String(a["scheduled_date"] ?? "").localeCompare(
+          String(b["scheduled_date"] ?? ""),
+        ),
+      );
+
+      return rows;
     },
   });
 
   const update = useMutation({
-    mutationFn: async (input: { id: string; status?: string; progress?: number; note?: string }) => {
-      const patch: { status?: string; progress?: number; completed_at?: string | null } = {};
+    mutationFn: async (input: {
+      id: string;
+      status?: string;
+      progress?: number;
+      note?: string;
+    }) => {
+      const patch: {
+        status?: string;
+        progress?: number;
+        completed_at?: ReturnType<typeof serverTimestamp> | null;
+      } = {};
+
       if (input.status) {
         patch.status = input.status;
-        patch.completed_at = input.status === "complete" ? new Date().toISOString() : null;
+        patch.completed_at =
+          input.status === "complete"
+            ? serverTimestamp()
+            : null;
       }
-      if (input.progress !== undefined) patch.progress = input.progress;
+
+      if (input.progress !== undefined) {
+        patch.progress = input.progress;
+      }
+
       if (Object.keys(patch).length > 0) {
-        const { error } = await supabase.from("jobs").update(patch).eq("id", input.id);
-        if (error) throw error;
+        await updateDoc(
+          doc(
+            firestore(),
+            COLLECTIONS.jobs,
+            input.id,
+          ),
+          patch,
+        );
       }
+
       if (input.status || input.note?.trim()) {
-        const { error } = await supabase.from("job_status_history").insert({
-          job_id: input.id,
+        const historyRef = doc(
+          collection(
+            firestore(),
+            COLLECTIONS.jobs,
+            input.id,
+            SUBCOLLECTIONS.jobStatusHistory,
+          ),
+        );
+
+        await setDoc(historyRef, {
           status: input.status ?? "note",
           note: input.note?.trim() || null,
-          changed_by: user!.id,
+          changed_by: user!.uid,
+          created_at: serverTimestamp(),
         });
-        if (error) throw error;
       }
     },
+
     onSuccess: async () => {
-      toast.success("Job updated — the office and client can see it now.");
+      toast.success(
+        "Job updated — the office and client can see it now.",
+      );
+
       setNoteFor(null);
       setNote("");
+
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["supervisor-jobs"] }),
-        queryClient.invalidateQueries({ queryKey: ["supervisor-history"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["supervisor-jobs"],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["supervisor-history"],
+        }),
       ]);
     },
+
     onError: (e: Error) => toast.error(e.message),
   });
 
   const savePhotos = useMutation({
-    mutationFn: async (input: { jobId: string; paths: string[] }) => {
-      const rows = input.paths.map((path) => ({
-        job_id: input.jobId,
-        storage_path: path,
-        stage: "progress",
-        uploaded_by: user!.id,
-      }));
-      const { error } = await supabase.from("job_photos").insert(rows);
-      if (error) throw error;
+    mutationFn: async (input: {
+      jobId: string;
+      paths: string[];
+    }) => {
+      await Promise.all(
+        input.paths.map(async (path) => {
+          const photoRef = doc(
+            collection(
+              firestore(),
+              COLLECTIONS.jobs,
+              input.jobId,
+              SUBCOLLECTIONS.jobPhotos,
+            ),
+          );
+
+          await setDoc(photoRef, {
+            storage_path: path,
+            stage: "progress",
+            uploaded_by: user!.uid,
+            created_at: serverTimestamp(),
+          });
+        }),
+      );
     },
-    onSuccess: () => toast.success("Site photos attached to the job."),
-    onError: (e: Error) => toast.error(e.message),
+
+    onSuccess: () =>
+      toast.success("Site photos attached to the job."),
+
+    onError: (e: Error) =>
+      toast.error(e.message),
   });
 
   if (loading || jobs.isLoading) {
@@ -141,10 +295,31 @@ function SupervisorDashboard() {
     );
   }
 
+  if (jobs.isError || bookings.isError || history.isError) {
+    const error =
+      jobs.error ??
+      bookings.error ??
+      history.error;
+
+    return (
+      <PortalShell
+        badge="Site"
+        title="Supervisor board"
+        subtitle="We couldn't load the supervisor board."
+      >
+        <p className="text-destructive">
+          {error instanceof Error
+            ? error.message
+            : String(error)}
+        </p>
+      </PortalShell>
+    );
+  }
+
   const rows = jobs.data ?? [];
-  const active = rows.filter((j) => j.status === "in_progress").length;
-  const done = rows.filter((j) => j.status === "complete").length;
-  const avgProgress = rows.length ? Math.round(rows.reduce((s, j) => s + j.progress, 0) / rows.length) : 0;
+  const active = rows.filter((j) => j["status"] === "in_progress").length;
+  const done = rows.filter((j) => j["status"] === "complete").length;
+  const avgProgress = rows.length ? Math.round(rows.reduce((s, j) => s + j["progress"], 0) / rows.length) : 0;
 
   return (
     <PortalShell
@@ -161,7 +336,7 @@ function SupervisorDashboard() {
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
         <Panel title="My jobs by status">
-          <CountBars data={countBy(rows, (j) => j.status)} label="Jobs" />
+          <CountBars data={countBy(rows, (j) => j["status"])} label="Jobs" />
         </Panel>
         <Panel title="Site visits assigned to me">
           {(bookings.data ?? []).length === 0 ? (
@@ -171,13 +346,13 @@ function SupervisorDashboard() {
               {(bookings.data ?? []).map((booking) => (
                 <li key={booking.id} className="flex items-start justify-between gap-3 py-3">
                   <div>
-                    <p className="font-semibold">{prettyStatus(booking.booking_type)}</p>
+                    <p className="font-semibold">{prettyStatus(booking["booking_type"])}</p>
                     <p className="text-muted-foreground">
-                      {booking.full_name} · {booking.address ?? "no address"}
+                      {booking["full_name"]} · {booking["address"] ?? "no address"}
                     </p>
                   </div>
                   <span className="text-xs font-semibold text-muted-foreground">
-                    {shortDate(booking.scheduled_date)} · {booking.scheduled_time.slice(0, 5)}
+                    {shortDate(booking["scheduled_date"])} · {String(booking["scheduled_time"] ?? "").slice(0, 5)}
                   </span>
                 </li>
               ))}
@@ -191,24 +366,24 @@ function SupervisorDashboard() {
           <Empty>No jobs assigned to you yet. The office assigns jobs when a lead is converted.</Empty>
         ) : (
           rows.map((job) => (
-            <Panel key={job.id} title={job.title} action={<StatusPill status={job.status} />}>
+            <Panel key={job.id} title={job["title"]} action={<StatusPill status={job["status"]} />}>
               <p className="text-sm text-muted-foreground">
-                {job.address} · {job.client_name} · {job.reference} · {money(job.quote_amount)}
+                {job["address"]} · {job["client_name"]} · {job["reference"]} · {money(job["quote_amount"])}
               </p>
 
               <div className="mt-4">
                 <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                   <span>Progress</span>
-                  <span>{job.progress}%</span>
+                  <span>{job["progress"]}%</span>
                 </div>
                 <input
                   type="range"
                   min={0}
                   max={100}
                   step={5}
-                  defaultValue={job.progress}
+                  defaultValue={job["progress"]}
                   className="mt-2 w-full accent-accent"
-                  aria-label={`Progress for ${job.title}`}
+                  aria-label={`Progress for ${job["title"]}`}
                   onMouseUp={(e) => update.mutate({ id: job.id, progress: Number(e.currentTarget.value) })}
                   onTouchEnd={(e) => update.mutate({ id: job.id, progress: Number(e.currentTarget.value) })}
                 />
@@ -219,7 +394,7 @@ function SupervisorDashboard() {
                   <Button
                     key={status.value}
                     size="sm"
-                    variant={job.status === status.value ? "accent" : "outline"}
+                    variant={job["status"] === status.value ? "accent" : "outline"}
                     disabled={update.isPending}
                     onClick={() => update.mutate({ id: job.id, status: status.value })}
                   >
@@ -275,10 +450,10 @@ function SupervisorDashboard() {
               {(history.data ?? []).map((entry) => (
                 <li key={entry.id} className="flex items-start justify-between gap-3 py-3">
                   <div>
-                    <p className="font-semibold">{prettyStatus(entry.status)}</p>
-                    {entry.note && <p className="text-muted-foreground">{entry.note}</p>}
+                    <p className="font-semibold">{prettyStatus(entry["status"])}</p>
+                    {entry["note"] && <p className="text-muted-foreground">{entry["note"]}</p>}
                   </div>
-                  <span className="text-xs text-muted-foreground">{shortDate(entry.created_at)}</span>
+                  <span className="text-xs text-muted-foreground">{shortDate(entry["created_at"])}</span>
                 </li>
               ))}
             </ul>

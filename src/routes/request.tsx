@@ -8,7 +8,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  collection,
+  doc,
+  serverTimestamp,
+  setDoc,
+} from "firebase/firestore";
+
+import { firestore } from "@/integrations/firebase/client";
+import { COLLECTIONS } from "@/integrations/firebase/config";
+
 import { BUDGET_RANGES } from "@/lib/prop3000";
 
 export const Route = createFileRoute("/request")({
@@ -40,6 +50,7 @@ const TRADE_OPTIONS = [
 ];
 
 function RequestPage() {
+  const { user } = useAuth();
   const [form, setForm] = useState({
     full_name: "",
     email: "",
@@ -61,14 +72,24 @@ function RequestPage() {
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (form.full_name.trim().length < 2 || form.description.trim().length < 10) {
+
+    if (
+      form.full_name.trim().length < 2 ||
+      form.description.trim().length < 10
+    ) {
       toast.error("Please add your name and a short description of the work.");
       return;
     }
+
     setBusy(true);
-    const { data, error } = await supabase
-      .from("service_requests")
-      .insert({
+
+    try {
+      const requestRef = doc(
+        collection(firestore(), COLLECTIONS.serviceRequests),
+      );
+
+      await setDoc(requestRef, {
+        reference: requestRef.id,
         full_name: form.full_name.trim(),
         email: form.email.trim(),
         phone: form.phone.trim(),
@@ -78,17 +99,21 @@ function RequestPage() {
         preferred_start_date: form.preferred_start_date || null,
         service_types: types,
         photo_paths: photos,
-      })
-      .select("reference")
-      .single();
-    setBusy(false);
-    if (error) {
+
+        status: "new",
+        client_id: user?.uid ?? null,
+
+        created_at: serverTimestamp(),
+      });
+
+      setReference(requestRef.id);
+      toast.success("Request received");
+    } catch (error) {
       console.error(error);
       toast.error("We couldn't send that. Please try again.");
-      return;
+    } finally {
+      setBusy(false);
     }
-    setReference(data.reference);
-    toast.success("Request received");
   }
 
   if (reference) {
@@ -149,9 +174,8 @@ function RequestPage() {
                     key={option}
                     type="button"
                     onClick={() => setTypes(active ? types.filter((t) => t !== option) : [...types, option])}
-                    className={`rounded-full border px-4 py-1.5 text-sm font-semibold transition-colors ${
-                      active ? "border-accent bg-accent text-accent-foreground" : "border-border bg-background hover:border-accent"
-                    }`}
+                    className={`rounded-full border px-4 py-1.5 text-sm font-semibold transition-colors ${active ? "border-accent bg-accent text-accent-foreground" : "border-border bg-background hover:border-accent"
+                      }`}
                   >
                     {option}
                   </button>
