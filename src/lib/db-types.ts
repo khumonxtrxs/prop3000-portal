@@ -1,3 +1,6 @@
+// Row shapes for every collection. Generated from the original Supabase schema and kept as plain
+// TypeScript types: Firestore documents use the same field names, so the screens did not change.
+
 export type Json =
   | string
   | number
@@ -431,6 +434,13 @@ export type Database = {
           reference: string
           status: string
           updated_at: string
+          // Copied from the listing when the offer is made (Firestore has no joins).
+          listing_title: string
+          listing_address: string
+          asking_price: number
+          agent_name: string
+          agent_phone: string
+          agent_email: string
         }
         Insert: {
           agent_notes?: string | null
