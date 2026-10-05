@@ -2,11 +2,13 @@ name: Deploy
 
 # main deploys to production, develop to staging.
 # Each job reads its values from the matching GitHub environment (Settings > Environments),
-# so staging and production can point at different Supabase / Firebase projects.
+# so staging and production point at different Firebase projects.
 #
-# Build-time values (VITE_*) are baked into the browser bundle.
-# Runtime values (SUPABASE_*, MAPBOX_ACCESS_TOKEN) are uploaded as Cloudflare Worker secrets,
-# because the server code reads them from process.env on every request.
+# Build-time values (VITE_*) are baked into the bundle; Firebase web config is public by design.
+# MAPBOX_ACCESS_TOKEN is uploaded as a Cloudflare Worker secret, because the server reads it from
+# process.env on every request.
+# The Firestore and Storage security rules are deployed to Firebase first, so the app never runs
+# against rules older than the code that expects them.
 
 on:
   push:
@@ -21,11 +23,21 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy-staging:
-    if: github.ref == 'refs/heads/develop'
-    name: Deploy staging
+  deploy:
+    name: Deploy ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
-    environment: staging
+    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
+
+    env:
+      VITE_FIREBASE_EMULATORS: false
+      VITE_MAPBOX_PUBLIC_TOKEN: ${{ secrets.VITE_MAPBOX_PUBLIC_TOKEN }}
+      VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+      VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+      VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+      VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}
+      VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+      VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
 
     steps:
       - name: Checkout repository
@@ -40,86 +52,30 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build staging application
-        run: npm run build:staging
+      # FIREBASE_SERVICE_ACCOUNT is the JSON key of a service account with the
+      # "Firebase Rules Admin" role (Firebase console > Project settings > Service accounts).
+      - name: Deploy Firestore and Storage rules
         env:
-          VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
-          VITE_FIREBASE_EMULATORS: false
-          VITE_MAPBOX_PUBLIC_TOKEN: ${{ secrets.VITE_MAPBOX_PUBLIC_TOKEN }}
-          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
-          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
-          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
-          VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}
-          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
-          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          echo "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/firebase-key.json"
+          GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/firebase-key.json" npx firebase deploy \
+            --only firestore:rules,firestore:indexes,storage \
+            --project "$VITE_FIREBASE_PROJECT_ID" --non-interactive
+          rm "$RUNNER_TEMP/firebase-key.json"
 
-      - name: Deploy staging to Cloudflare
+      - name: Build application
+        run: npm run ${{ github.ref == 'refs/heads/main' && 'build' || 'build:staging' }}
+
+      - name: Deploy to Cloudflare
         uses: cloudflare/wrangler-action@v3
         with:
           wranglerVersion: "4"
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          environment: staging
-          command: deploy --config wrangler.jsonc --env staging
+          environment: ${{ github.ref == 'refs/heads/develop' && 'staging' || '' }}
+          command: deploy --config wrangler.jsonc ${{ github.ref == 'refs/heads/develop' && '--env staging' || '' }}
           secrets: |
-            SUPABASE_URL
-            SUPABASE_PUBLISHABLE_KEY
-            SUPABASE_SERVICE_ROLE_KEY
             MAPBOX_ACCESS_TOKEN
         env:
-          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-          SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          MAPBOX_ACCESS_TOKEN: ${{ secrets.MAPBOX_ACCESS_TOKEN }}
-
-  deploy-production:
-    if: github.ref == 'refs/heads/main'
-    name: Deploy production
-    runs-on: ubuntu-latest
-    environment: production
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build production application
-        run: npm run build
-        env:
-          VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
-          VITE_FIREBASE_EMULATORS: false
-          VITE_MAPBOX_PUBLIC_TOKEN: ${{ secrets.VITE_MAPBOX_PUBLIC_TOKEN }}
-          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
-          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
-          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
-          VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}
-          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
-          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
-
-      - name: Deploy production to Cloudflare
-        uses: cloudflare/wrangler-action@v3
-        with:
-          wranglerVersion: "4"
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy --config wrangler.jsonc
-          secrets: |
-            SUPABASE_URL
-            SUPABASE_PUBLISHABLE_KEY
-            SUPABASE_SERVICE_ROLE_KEY
-            MAPBOX_ACCESS_TOKEN
-        env:
-          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-          SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           MAPBOX_ACCESS_TOKEN: ${{ secrets.MAPBOX_ACCESS_TOKEN }}
