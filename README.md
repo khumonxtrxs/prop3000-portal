@@ -1,3 +1,7 @@
+## Entity Relationship Diagram
+
+[![PROP3000 ERD](docs/database/prop3000-erd.webp)](docs/database/prop3000-erd.webp)
+
 # Introduction 
 TODO: Give a short introduction of your project. Let this section explain the objectives or the motivation behind this project. 
 
