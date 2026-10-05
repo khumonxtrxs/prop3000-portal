@@ -1,17 +1,28 @@
 name: Deploy
 
+# main deploys to production, develop to staging.
+# Each job reads its values from the matching GitHub environment (Settings > Environments),
+# so staging and production can point at different Supabase / Firebase projects.
+#
+# Build-time values (VITE_*) are baked into the browser bundle.
+# Runtime values (SUPABASE_*, MAPBOX_ACCESS_TOKEN) are uploaded as Cloudflare Worker secrets,
+# because the server code reads them from process.env on every request.
+
 on:
   push:
     branches:
       - main
       - develop
-      - chore/pipeline
 
   workflow_dispatch:
 
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   deploy-staging:
-    if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/chore/pipeline'
+    if: github.ref == 'refs/heads/develop'
     name: Deploy staging
     runs-on: ubuntu-latest
     environment: staging
@@ -23,7 +34,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -32,6 +43,8 @@ jobs:
       - name: Build staging application
         run: npm run build:staging
         env:
+          VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
           VITE_FIREBASE_EMULATORS: false
           VITE_MAPBOX_PUBLIC_TOKEN: ${{ secrets.VITE_MAPBOX_PUBLIC_TOKEN }}
           VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
@@ -44,9 +57,21 @@ jobs:
       - name: Deploy staging to Cloudflare
         uses: cloudflare/wrangler-action@v3
         with:
+          wranglerVersion: "4"
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          environment: staging
           command: deploy --config wrangler.jsonc --env staging
+          secrets: |
+            SUPABASE_URL
+            SUPABASE_PUBLISHABLE_KEY
+            SUPABASE_SERVICE_ROLE_KEY
+            MAPBOX_ACCESS_TOKEN
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          MAPBOX_ACCESS_TOKEN: ${{ secrets.MAPBOX_ACCESS_TOKEN }}
 
   deploy-production:
     if: github.ref == 'refs/heads/main'
@@ -61,7 +86,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -70,6 +95,8 @@ jobs:
       - name: Build production application
         run: npm run build
         env:
+          VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
           VITE_FIREBASE_EMULATORS: false
           VITE_MAPBOX_PUBLIC_TOKEN: ${{ secrets.VITE_MAPBOX_PUBLIC_TOKEN }}
           VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
@@ -82,7 +109,17 @@ jobs:
       - name: Deploy production to Cloudflare
         uses: cloudflare/wrangler-action@v3
         with:
+          wranglerVersion: "4"
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy --config wrangler.jsonc
-          
+          secrets: |
+            SUPABASE_URL
+            SUPABASE_PUBLISHABLE_KEY
+            SUPABASE_SERVICE_ROLE_KEY
+            MAPBOX_ACCESS_TOKEN
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          MAPBOX_ACCESS_TOKEN: ${{ secrets.MAPBOX_ACCESS_TOKEN }}

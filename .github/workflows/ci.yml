@@ -5,18 +5,15 @@ on:
     branches:
       - main
       - develop
-      - chore/pipeline
 
   push:
     branches:
       - main
       - develop
-      - chore/pipeline
 
 jobs:
   build:
-    # name: Lint, types and build
-    name: Lint and build
+    name: Lint, types and build
     runs-on: ubuntu-latest
 
     steps:
@@ -26,7 +23,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -35,9 +32,8 @@ jobs:
       - name: Run ESLint
         run: npm run lint
 
-      # Will error out until firebase migration is complete
-      # - name: Type check
-      #   run: npx tsc --noEmit
+      - name: Type check
+        run: npx tsc --noEmit
 
       - name: Build application
         run: npm run build
@@ -71,7 +67,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Set up Java

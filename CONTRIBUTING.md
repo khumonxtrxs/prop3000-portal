@@ -4,11 +4,11 @@ This guide explains how the team works in this repo, so anyone can pick up a bra
 
 ## Getting started
 
-Requirements: Node.js 20+ and npm.
+Requirements: Node.js 22+ and npm.
 
 ```sh
-git clone https://Prop3000@dev.azure.com/Prop3000/P3000portal/_git/P3000portal
-cd P3000portal
+git clone https://github.com/khumonxtrxs/prop3000-portal.git
+cd prop3000-portal
 npm install
 cp .env.example .env   # then fill in the values (ask the team lead)
 npm run dev
@@ -76,7 +76,7 @@ Planned branches, in order. Branches 4-8 are the Firebase migration; 9 onwards a
 3. Make the change and keep it to one topic.
 4. Before you open a PR, run `npm run lint`, `npx tsc --noEmit` and `npm run build`.
 5. Stage and commit with a clear message, e.g. `feature(design-tokens): match navy/orange palette to handoff`.
-6. Push and open a pull request into `main` on Azure DevOps. Get one teammate to review it.
+6. Push and open a pull request into `main` on GitHub. CI must pass and one teammate must review it. Merging into `main` deploys to production.
 
 Never force-push or rewrite history that has already been pushed (see `AGENTS.md`).
 

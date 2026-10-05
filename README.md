@@ -2,7 +2,7 @@
 
 PROP3000 Portal is a full-stack web application developed for Prop3000 Developers and Prop3000 Investments. The platform combines the company's public-facing website with a role-based portal used to manage property enquiries, service requests, jobs, quotes, bookings, property listings and offers.
 
-The application is built with **TanStack Start and React 19**, hosted using **Cloudflare Workers**, and is currently being migrated from Supabase to **Firebase Authentication, Cloud Firestore and Firebase Storage**.
+The application is built with **TanStack Start and React 19**, hosted using **Cloudflare Workers**. **Supabase** currently provides sign-in, the database and file storage. The app is being migrated to **Firebase Authentication, Cloud Firestore and Firebase Storage**; the Firebase project, security rules and rule tests are in place, and the app switches over once every screen has been moved (see `docs/firebase-migration.md`).
 
 ---
 
@@ -49,7 +49,7 @@ Authenticated users are assigned one of five roles:
 | Supervisor | Manage assigned jobs, progress and job history |
 | Owner | View business-wide analytics and operational information |
 
-Role information is stored in Firebase using the authenticated user's Firebase UID.
+Role information is stored in the Supabase `user_roles` table. After the Firebase migration it moves to the Firestore `user_roles/{uid}` documents.
 
 ---
 
@@ -65,10 +65,9 @@ Role information is stored in Firebase using the authenticated user's Firebase U
 | Language | TypeScript |
 | Styling | Tailwind CSS 4 |
 | UI components | Radix UI / shadcn-style components |
-| Authentication | Firebase Authentication |
-| Application data | Cloud Firestore |
-| File storage | Firebase Storage |
-| Legacy / migration data layer | Supabase |
+| Authentication | Supabase Auth (moving to Firebase Authentication) |
+| Application data | Supabase Postgres (moving to Cloud Firestore) |
+| File storage | Supabase Storage (moving to Firebase Storage) |
 | Maps | Mapbox GL |
 | Charts | Recharts |
 | Validation | Zod |
@@ -86,12 +85,20 @@ PROP3000 separates application hosting from managed backend services.
 
 TanStack Start produces a server-side application bundle and public client assets during the build process. The resulting output is deployed to **Cloudflare Workers**, which executes the application server bundle and serves the static assets.
 
-Firebase provides these managed backend services used by the portal:
+Supabase currently provides the managed backend services used by the portal:
+
+- **Supabase Auth** - user authentication
+- **Supabase Postgres** - application data, protected by row-level security policies
+- **Supabase Storage** - uploaded files and images
+
+After the migration, Firebase takes over these jobs:
 
 - **Firebase Authentication** - user authentication
 - **Cloud Firestore** - application data
 - **Firebase Storage** - uploaded files and images
 - **Firebase Security Rules** - authorization and data-access boundaries
+
+Sign-in and data must always come from the same service: Supabase only returns rows to a user signed in to Supabase, so switching sign-in to Firebase on its own leaves every dashboard empty.
 
 Cloudflare deployment settings are stored in the root `wrangler.jsonc`.
 
@@ -116,7 +123,7 @@ p3000portal
 Production Firebase project
 ```
 
-The application is currently undergoing a phased migration from Supabase to Firebase. Authentication and Firebase infrastructure are being migrated independently from the remaining application data flows so that each part of the application can be tested before Supabase is removed completely.
+The application is currently undergoing a phased migration from Supabase to Firebase. The Firebase infrastructure is set up first; sign-in and the data screens then move over together so the live site keeps working at every step.
 
 For more detail, see:
 
@@ -180,7 +187,7 @@ supabase/
 
 Before running the project locally, install:
 
-- Node.js 20 or later
+- Node.js 22 or later (Vite 8 does not run on Node 18)
 - npm
 - Java 21 for the Firebase emulators
 - Docker and the Supabase CLI if working with the remaining Supabase data layer
@@ -188,9 +195,11 @@ Before running the project locally, install:
 Clone the repository:
 
 ```sh
-git clone https://Prop3000@dev.azure.com/Prop3000/P3000portal/_git/P3000portal
-cd P3000portal
+git clone https://github.com/khumonxtrxs/prop3000-portal.git
+cd prop3000-portal
 ```
+
+On Windows, clone into a short path such as `C:\dev\prop3000-portal`. Very long paths make `git clone` fail with `'$GIT_DIR' too big`.
 
 Install dependencies:
 
@@ -305,6 +314,8 @@ To recreate the local database and apply the demo seed data:
 npx supabase db reset
 ```
 
+Without the Supabase variables in `.env`, every page shows "Missing Supabase environment variable(s)".
+
 The long-term application architecture replaces Supabase authentication, database access and storage with Firebase.
 
 The migration is performed incrementally so that each application workflow can be verified before the previous implementation is removed.
@@ -329,7 +340,9 @@ Demo password:
 Prop3000#2026
 ```
 
-Firebase demo users can be created or updated using:
+While the app signs in through Supabase, the demo accounts are created automatically the first time someone clicks a demo login on `/auth` (this needs `SUPABASE_SERVICE_ROLE_KEY`).
+
+For the Firebase migration, Firebase demo users can be created or updated using:
 
 ```sh
 npm run seed:demo-users
@@ -414,6 +427,34 @@ p3000portal
 ```
 
 The generated `.output/server/wrangler.json` is build output and should not be used as the permanent deployment configuration. The repository-level `wrangler.jsonc` is the source-controlled deployment configuration.
+
+### Deploying through GitHub
+
+Deployments run from GitHub Actions (`.github/workflows/deploy.yml`):
+
+| Branch | Deploys to |
+|---|---|
+| `main` | Production (`p3000portal`) |
+| `develop` | Staging (`p3000portal-staging`) |
+
+Every pull request into `main` or `develop` runs `.github/workflows/ci.yml` (lint, type check, build and the security-rule tests).
+
+The deploy jobs read their values from the GitHub environments **production** and **staging** (Settings > Environments). Set these in each environment:
+
+| Name | Type | Used for |
+|---|---|---|
+| `CLOUDFLARE_API_TOKEN` | Secret | Deploying the Worker |
+| `CLOUDFLARE_ACCOUNT_ID` | Variable | Deploying the Worker |
+| `SUPABASE_URL` | Variable | Browser bundle and Worker runtime |
+| `SUPABASE_PUBLISHABLE_KEY` | Variable | Browser bundle and Worker runtime |
+| `SUPABASE_SERVICE_ROLE_KEY` | Secret | Worker runtime only (demo accounts, admin functions) |
+| `VITE_MAPBOX_PUBLIC_TOKEN` | Secret | Maps in the browser |
+| `MAPBOX_ACCESS_TOKEN` | Secret | Address and route lookups on the server |
+| `VITE_FIREBASE_*` | Variables | Firebase web config (not used by the app until the migration lands) |
+
+The workflow uploads `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY` and `MAPBOX_ACCESS_TOKEN` to Cloudflare as Worker secrets on every deploy, so nobody needs to set them by hand in the Cloudflare dashboard.
+
+In Supabase, add the production and staging URLs under **Authentication > URL Configuration** so sign-in redirects back to the live site.
 
 ---
 
@@ -523,17 +564,7 @@ Example:
 
 The project database model and relationships are documented through the project ERD.
 
-Recommended location:
-
-```text
-docs/database/prop3000-erd.webp
-```
-
-Example:
-
-```markdown
-[![PROP3000 ERD](docs/database/prop3000-erd.webp)](docs/database/prop3000-erd.webp)
-```
+[![PROP3000 ERD](docs/Database/prop3000-erd.webp)](docs/Database/prop3000-erd.webp)
 
 ---
 
@@ -584,7 +615,7 @@ CONTRIBUTING.md
 
 ## Hosting Strategy
 
-PROP3000 uses Cloudflare Workers for application hosting and Firebase for managed backend services.
+PROP3000 uses Cloudflare Workers for application hosting and Supabase (moving to Firebase) for managed backend services.
 
 TanStack Start generates a server-side application bundle that can be executed by Cloudflare Workers together with the application's static assets. This removes the requirement to manage a traditional dedicated web server while still allowing server-rendered application functionality.
 
