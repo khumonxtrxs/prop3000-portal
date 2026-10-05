@@ -2,17 +2,15 @@ import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { CalendarDays, CheckCircle2, HardHat, Images, Loader2 } from "lucide-react";
-import { CountBars } from "@/components/portal/Charts";
-import { Empty, Panel, PortalShell, StatCard } from "@/components/portal/PortalShell";
-import { PhotoUpload } from "@/components/PhotoUpload";
+import { Loader2 } from "lucide-react";
+import { Empty, PortalShell } from "@/components/portal/PortalShell";
+import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { countBy } from "@/lib/portal";
-import { JOB_STATUSES, money, prettyStatus, shortDate } from "@/lib/prop3000";
-import { StatusBadge } from "@/components/StatusBadge";
+import { money, prettyStatus, shortDate } from "@/lib/prop3000";
+import { statusTone, type StatusTone } from "@/lib/status";
 
 export const Route = createFileRoute("/_authenticated/supervisor")({
   head: () => ({
@@ -31,261 +29,325 @@ export const Route = createFileRoute("/_authenticated/supervisor")({
   component: SupervisorDashboard,
 });
 
+const JOB_ACTIONS = ["approved", "in_progress", "on_hold", "complete"] as const;
+
+/** 4px status-coloured top border for job cards (S7). */
+const BORDER_TOP: Record<StatusTone, string> = {
+  wait: "border-t-status-wait-foreground",
+  motion: "border-t-status-motion-foreground",
+  good: "border-t-status-good-foreground",
+  bad: "border-t-status-bad-foreground",
+  neutral: "border-t-status-neutral-foreground",
+};
+
 function SupervisorDashboard() {
   const { user, isStaff, isOffice, loading } = useAuth();
   const queryClient = useQueryClient();
-  const [noteFor, setNoteFor] = useState<string | null>(null);
-  const [note, setNote] = useState("");
+  const [progressDraft, setProgressDraft] = useState<Record<string, number>>({});
+  const [notes, setNotes] = useState<Record<string, string>>({});
 
   const jobs = useQuery({
-    queryKey: ["supervisor-jobs", user?.id, isOffice],
+    queryKey: ["jobs", "supervisor", user?.id, isOffice],
     enabled: !!user?.id && isStaff,
     queryFn: async () => {
       let query = supabase.from("jobs").select("*").order("created_at", { ascending: false });
       if (!isOffice) query = query.eq("supervisor_id", user!.id);
       const { data, error } = await query;
       if (error) throw error;
-      return data;
+      return data ?? [];
     },
   });
 
+  const jobIds = (jobs.data ?? []).map((job) => job.id);
+
   const history = useQuery({
-    queryKey: ["supervisor-history"],
-    enabled: isStaff,
+    queryKey: ["job-history", jobIds.join(",")],
+    enabled: jobIds.length > 0,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("job_status_history")
         .select("id, job_id, status, note, created_at")
-        .order("created_at", { ascending: false })
-        .limit(15);
+        .in("job_id", jobIds)
+        .order("created_at", { ascending: true });
       if (error) throw error;
-      return data;
+      return data ?? [];
     },
   });
 
-  const bookings = useQuery({
-    queryKey: ["supervisor-bookings", user?.id],
-    enabled: !!user?.id && isStaff,
+  const photos = useQuery({
+    queryKey: ["job-photos", jobIds.join(",")],
+    enabled: jobIds.length > 0,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("bookings")
-        .select("id, booking_type, full_name, address, scheduled_date, scheduled_time, status")
-        .eq("assigned_to", user!.id)
-        .order("scheduled_date", { ascending: true });
+      const { data, error } = await supabase.from("job_photos").select("id, job_id, storage_path").in("job_id", jobIds);
       if (error) throw error;
-      return data;
+      const rows = data ?? [];
+      if (rows.length === 0) return [];
+      // Private bucket: short-lived signed URLs, never public links.
+      const { data: signed } = await supabase.storage
+        .from("job-photos")
+        .createSignedUrls(
+          rows.map((row) => row.storage_path),
+          3600,
+        );
+      return rows.map((row, index) => ({ ...row, url: signed?.[index]?.signedUrl ?? null }));
     },
   });
 
-  const update = useMutation({
-    mutationFn: async (input: { id: string; status?: string; progress?: number; note?: string }) => {
-      const patch: { status?: string; progress?: number; completed_at?: string | null } = {};
-      if (input.status) {
-        patch.status = input.status;
-        patch.completed_at = input.status === "complete" ? new Date().toISOString() : null;
-      }
-      if (input.progress !== undefined) patch.progress = input.progress;
-      if (Object.keys(patch).length > 0) {
-        const { error } = await supabase.from("jobs").update(patch).eq("id", input.id);
-        if (error) throw error;
-      }
-      if (input.status || input.note?.trim()) {
-        const { error } = await supabase.from("job_status_history").insert({
-          job_id: input.id,
-          status: input.status ?? "note",
-          note: input.note?.trim() || null,
-          changed_by: user!.id,
-        });
-        if (error) throw error;
-      }
+  const refresh = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["jobs"] });
+    await queryClient.invalidateQueries({ queryKey: ["job-history"] });
+    await queryClient.invalidateQueries({ queryKey: ["notifications"] });
+  };
+
+  const setStatus = useMutation({
+    mutationFn: async (input: { id: string; reference: string; status: string }) => {
+      const { error } = await supabase
+        .from("jobs")
+        .update({
+          status: input.status,
+          completed_at: input.status === "complete" ? new Date().toISOString() : null,
+        })
+        .eq("id", input.id);
+      if (error) throw error;
+      const { error: historyError } = await supabase
+        .from("job_status_history")
+        .insert({ job_id: input.id, status: input.status, note: null, changed_by: user!.id });
+      if (historyError) throw historyError;
     },
-    onSuccess: async () => {
-      toast.success("Job updated — the office and client can see it now.");
-      setNoteFor(null);
-      setNote("");
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["supervisor-jobs"] }),
-        queryClient.invalidateQueries({ queryKey: ["supervisor-history"] }),
-      ]);
+    onSuccess: async (_res, input) => {
+      toast.success(`Job ${input.reference} marked ${prettyStatus(input.status).toLowerCase()} — office and client can see it.`);
+      await refresh();
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const savePhotos = useMutation({
-    mutationFn: async (input: { jobId: string; paths: string[] }) => {
-      const rows = input.paths.map((path) => ({
-        job_id: input.jobId,
-        storage_path: path,
-        stage: "progress",
-        uploaded_by: user!.id,
-      }));
-      const { error } = await supabase.from("job_photos").insert(rows);
+  const setProgress = useMutation({
+    mutationFn: async (input: { id: string; reference: string; progress: number }) => {
+      const { error } = await supabase.from("jobs").update({ progress: input.progress }).eq("id", input.id);
       if (error) throw error;
     },
-    onSuccess: () => toast.success("Site photos attached to the job."),
+    onSuccess: async (_res, input) => {
+      toast.success(`Job ${input.reference} at ${input.progress}% — office and client can see it.`);
+      await refresh();
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
-  if (loading || jobs.isLoading) {
+  const logNote = useMutation({
+    mutationFn: async (input: { id: string; reference: string; status: string; note: string }) => {
+      const { error } = await supabase
+        .from("job_status_history")
+        .insert({ job_id: input.id, status: input.status, note: input.note, changed_by: user!.id });
+      if (error) throw error;
+    },
+    onSuccess: async (_res, input) => {
+      toast.success(`Site note logged on ${input.reference}.`);
+      setNotes((current) => ({ ...current, [input.id]: "" }));
+      await refresh();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const uploadPhoto = useMutation({
+    mutationFn: async (input: { id: string; reference: string; file: File }) => {
+      const extension = input.file.name.split(".").pop() ?? "jpg";
+      const path = `${input.id}/${Date.now()}.${extension}`;
+      const { error } = await supabase.storage
+        .from("job-photos")
+        .upload(path, input.file, { contentType: input.file.type });
+      if (error) throw error;
+      const { error: rowError } = await supabase
+        .from("job_photos")
+        .insert({ job_id: input.id, storage_path: path, stage: "progress", uploaded_by: user!.id });
+      if (rowError) throw rowError;
+    },
+    onSuccess: async (_res, input) => {
+      toast.success(`Photo added to ${input.reference}.`);
+      await queryClient.invalidateQueries({ queryKey: ["job-photos"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  if (loading || (isStaff && jobs.isLoading)) {
     return (
-      <PortalShell badge="Site" title="Supervisor board" subtitle="Loading your jobs…">
-        <Loader2 className="mx-auto size-6 animate-spin text-accent" />
+      <PortalShell title="My jobs" subtitle="Loading your jobs…">
+        <Loader2 className="mx-auto size-6 animate-spin text-accent" aria-label="Loading" />
       </PortalShell>
     );
   }
 
   if (!isStaff) {
     return (
-      <PortalShell badge="Site" title="Supervisors only" subtitle="This board is for site supervisors and office staff.">
+      <PortalShell title="Supervisors only" subtitle="This board is for site supervisors and office staff.">
         <Empty>Ask an admin to grant you the supervisor role.</Empty>
       </PortalShell>
     );
   }
 
   const rows = jobs.data ?? [];
-  const active = rows.filter((j) => j.status === "in_progress").length;
-  const done = rows.filter((j) => j.status === "complete").length;
-  const avgProgress = rows.length ? Math.round(rows.reduce((s, j) => s + j.progress, 0) / rows.length) : 0;
+  const active = rows.filter((job) => job.status === "in_progress").length;
 
   return (
     <PortalShell
-      badge="Site supervisor / foreman"
-      title="Supervisor board"
-      subtitle="Your assigned jobs. Move the status, push the progress slider and upload site photos — the office and the client see it instantly."
+      title="My jobs"
+      subtitle={`${active} job${active === 1 ? "" : "s"} in progress · ${rows.length} assigned to you. Update status, progress and photos.`}
     >
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard icon={HardHat} label="Assigned jobs" value={String(rows.length)} />
-        <StatCard icon={Loader2} label="In progress" value={String(active)} />
-        <StatCard icon={CheckCircle2} label="Completed" value={String(done)} />
-        <StatCard icon={CalendarDays} label="Avg progress" value={`${avgProgress}%`} />
-      </div>
+      {rows.length === 0 ? (
+        <Empty>No jobs assigned to you yet. The office assigns jobs when a lead is converted.</Empty>
+      ) : (
+        <ul className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,340px),1fr))] items-start gap-5">
+          {rows.map((job) => {
+            const progress = progressDraft[job.id] ?? job.progress;
+            const jobPhotos = (photos.data ?? []).filter((photo) => photo.job_id === job.id);
+            const jobHistory = (history.data ?? []).filter((entry) => entry.job_id === job.id);
+            const note = notes[job.id] ?? "";
+            const commitProgress = () => {
+              if (progress !== job.progress) setProgress.mutate({ id: job.id, reference: job.reference, progress });
+            };
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-2">
-        <Panel title="My jobs by status">
-          <CountBars data={countBy(rows, (j) => j.status)} label="Jobs" />
-        </Panel>
-        <Panel title="Site visits assigned to me">
-          {(bookings.data ?? []).length === 0 ? (
-            <Empty>No site visits booked for you yet.</Empty>
-          ) : (
-            <ul className="divide-y divide-border text-sm">
-              {(bookings.data ?? []).map((booking) => (
-                <li key={booking.id} className="flex items-start justify-between gap-3 py-3">
-                  <div>
-                    <p className="font-semibold">{prettyStatus(booking.booking_type)}</p>
-                    <p className="text-muted-foreground">
-                      {booking.full_name} · {booking.address ?? "no address"}
+            return (
+              <li
+                key={job.id}
+                className={`rounded-sm border border-border border-t-4 bg-card p-6 ${BORDER_TOP[statusTone(job.status)]}`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-label text-[12px] text-ink-subtle">
+                      {job.reference} · {job.client_name}
                     </p>
+                    <h2 className="font-display mt-1 text-2xl font-bold uppercase leading-tight text-foreground">
+                      {job.title}
+                    </h2>
+                    <p className="mt-1 text-muted-foreground">{job.address}</p>
                   </div>
-                  <span className="text-xs font-semibold text-muted-foreground">
-                    {shortDate(booking.scheduled_date)} · {booking.scheduled_time.slice(0, 5)}
+                  <StatusBadge status={job.status} />
+                </div>
+
+                <div className="mt-5 flex items-end justify-between gap-3">
+                  <span className="text-label text-[12px] text-ink-subtle">Quote</span>
+                  <span className="font-display text-3xl font-bold leading-none text-primary">
+                    {money(job.quote_amount)}
                   </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-      </div>
-
-      <div className="mt-8 grid gap-6">
-        {rows.length === 0 ? (
-          <Empty>No jobs assigned to you yet. The office assigns jobs when a lead is converted.</Empty>
-        ) : (
-          rows.map((job) => (
-            <Panel key={job.id} title={job.title} action={<StatusBadge status={job.status} />}>
-              <p className="text-sm text-muted-foreground">
-                {job.address} · {job.client_name} · {job.reference} · {money(job.quote_amount)}
-              </p>
-
-              <div className="mt-4">
-                <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                  <span>Progress</span>
-                  <span>{job.progress}%</span>
                 </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  step={5}
-                  defaultValue={job.progress}
-                  className="mt-2 w-full accent-accent"
-                  aria-label={`Progress for ${job.title}`}
-                  onMouseUp={(e) => update.mutate({ id: job.id, progress: Number(e.currentTarget.value) })}
-                  onTouchEnd={(e) => update.mutate({ id: job.id, progress: Number(e.currentTarget.value) })}
-                />
-              </div>
 
-              <div className="mt-4 flex flex-wrap gap-2">
-                {JOB_STATUSES.map((status) => (
-                  <Button
-                    key={status.value}
-                    size="sm"
-                    variant={job.status === status.value ? "accent" : "outline"}
-                    disabled={update.isPending}
-                    onClick={() => update.mutate({ id: job.id, status: status.value })}
-                  >
-                    {status.label}
-                  </Button>
-                ))}
-                <Button size="sm" variant="brick" onClick={() => setNoteFor(noteFor === job.id ? null : job.id)}>
-                  Add site note
-                </Button>
-              </div>
-
-              {noteFor === job.id && (
-                <div className="mt-3 space-y-2 rounded-lg border border-border bg-secondary/40 p-4">
-                  <Textarea
-                    rows={2}
-                    maxLength={500}
-                    placeholder="What happened on site today?"
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                  />
-                  <Button size="sm" variant="accent" disabled={update.isPending} onClick={() => update.mutate({ id: job.id, note })}>
-                    Save note
-                  </Button>
-                </div>
-              )}
-
-              <div className="mt-5 rounded-lg border border-dashed border-border p-4">
-                <p className="flex items-center gap-2 text-sm font-semibold">
-                  <Images className="size-4 text-accent" /> Site photos
-                </p>
-                <div className="mt-3">
-                  <PhotoUpload
-                    bucket="job-photos"
-                    prefix={job.id}
-                    paths={[]}
-                    label="Upload progress photos"
-                    hint="Compressed on your phone first — works on weak site signal."
-                    onChange={(paths) => {
-                      if (paths.length > 0) savePhotos.mutate({ jobId: job.id, paths });
-                    }}
-                  />
-                </div>
-              </div>
-            </Panel>
-          ))
-        )}
-
-        <Panel title="Recent site updates">
-          {(history.data ?? []).length === 0 ? (
-            <Empty>No status updates logged yet.</Empty>
-          ) : (
-            <ul className="divide-y divide-border text-sm">
-              {(history.data ?? []).map((entry) => (
-                <li key={entry.id} className="flex items-start justify-between gap-3 py-3">
-                  <div>
-                    <StatusBadge status={entry.status} />
-                    {entry.note && <p className="text-muted-foreground">{entry.note}</p>}
+                <div className="mt-4">
+                  <div className="flex items-center justify-between">
+                    <label htmlFor={`progress-${job.id}`} className="text-label text-[12px] text-ink-subtle">
+                      Progress
+                    </label>
+                    <span className="text-label text-[12px] text-ink-subtle">{progress}%</span>
                   </div>
-                  <span className="text-xs text-muted-foreground">{shortDate(entry.created_at)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-      </div>
+                  <div className="mt-2 h-2 overflow-hidden rounded-sm bg-secondary" aria-hidden="true">
+                    <div className="h-full bg-accent transition-all" style={{ width: `${progress}%` }} />
+                  </div>
+                  <input
+                    id={`progress-${job.id}`}
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={progress}
+                    className="mt-3 w-full accent-accent"
+                    onChange={(e) => setProgressDraft((current) => ({ ...current, [job.id]: Number(e.target.value) }))}
+                    onPointerUp={commitProgress}
+                    onKeyUp={commitProgress}
+                  />
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label={`Status for ${job.reference}`}>
+                  {JOB_ACTIONS.map((status) => (
+                    <Button
+                      key={status}
+                      size="sm"
+                      variant={job.status === status ? "default" : "outline"}
+                      aria-pressed={job.status === status}
+                      className="font-display font-bold uppercase tracking-wide"
+                      disabled={setStatus.isPending || job.status === status}
+                      onClick={() => setStatus.mutate({ id: job.id, reference: job.reference, status })}
+                    >
+                      {prettyStatus(status)}
+                    </Button>
+                  ))}
+                </div>
+
+                <div className="mt-4 grid grid-cols-4 gap-2">
+                  {jobPhotos.map((photo, index) =>
+                    photo.url ? (
+                      <img
+                        key={photo.id}
+                        src={photo.url}
+                        alt={`Site photo ${index + 1} for ${job.reference}`}
+                        className="aspect-square w-full rounded-sm object-cover"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div key={photo.id} className="hatch-fill aspect-square rounded-sm" aria-hidden="true" />
+                    ),
+                  )}
+                  <label className="flex aspect-square cursor-pointer items-center justify-center rounded-sm border border-dashed border-border text-2xl text-ink-subtle hover:bg-muted focus-within:ring-2 focus-within:ring-ring">
+                    {uploadPhoto.isPending ? <Loader2 className="size-5 animate-spin" aria-hidden="true" /> : <span aria-hidden="true">+</span>}
+                    <span className="sr-only">Upload a site photo for {job.reference}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="sr-only"
+                      disabled={uploadPhoto.isPending}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) uploadPhoto.mutate({ id: job.id, reference: job.reference, file });
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                </div>
+
+                <form
+                  className="mt-4 flex gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!note.trim()) return;
+                    logNote.mutate({ id: job.id, reference: job.reference, status: job.status, note: note.trim() });
+                  }}
+                >
+                  <Input
+                    aria-label={`Site note for ${job.reference}`}
+                    className="h-11"
+                    maxLength={500}
+                    placeholder="Site note for the history…"
+                    value={note}
+                    onChange={(e) => setNotes((current) => ({ ...current, [job.id]: e.target.value }))}
+                  />
+                  <Button
+                    type="submit"
+                    className="font-display h-11 font-bold uppercase tracking-wide"
+                    disabled={logNote.isPending || !note.trim()}
+                  >
+                    Log
+                  </Button>
+                </form>
+
+                {jobHistory.length > 0 && (
+                  <div className="mt-4 border-t border-divider pt-4">
+                    <h3 className="text-label text-[12px] text-ink-subtle">Status history</h3>
+                    <ol className="mt-2 space-y-1.5">
+                      {jobHistory.map((entry) => (
+                        <li key={entry.id} className="flex justify-between gap-3 text-sm">
+                          <span>
+                            <span className="font-semibold text-primary">{prettyStatus(entry.status)}</span>
+                            {entry.note && <span className="ml-3 text-muted-foreground">{entry.note}</span>}
+                          </span>
+                          <span className="shrink-0 text-ink-faint">{shortDate(entry.created_at)}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </PortalShell>
   );
 }
