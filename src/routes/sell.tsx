@@ -8,7 +8,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+
+import {
+  collection,
+  doc,
+  serverTimestamp,
+  setDoc,
+} from "firebase/firestore";
+
+import { firestore } from "@/integrations/firebase/client";
+import { COLLECTIONS } from "@/integrations/firebase/config";
 import { CONDITIONS, PROPERTY_TYPES } from "@/lib/prop3000";
 
 export const Route = createFileRoute("/sell")({
@@ -27,6 +37,7 @@ export const Route = createFileRoute("/sell")({
 });
 
 function SellPage() {
+  const { user } = useAuth();
   const [form, setForm] = useState({
     full_name: "",
     email: "",
@@ -52,9 +63,14 @@ function SellPage() {
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
-    const { data, error } = await supabase
-      .from("property_submissions")
-      .insert({
+
+    try {
+      const submissionRef = doc(
+        collection(firestore(), COLLECTIONS.propertySubmissions),
+      );
+
+      await setDoc(submissionRef, {
+        reference: submissionRef.id,
         full_name: form.full_name.trim(),
         email: form.email.trim(),
         phone: form.phone.trim(),
@@ -64,21 +80,28 @@ function SellPage() {
         bedrooms: form.bedrooms ? Number(form.bedrooms) : null,
         bathrooms: form.bathrooms ? Number(form.bathrooms) : null,
         erf_size: form.erf_size.trim() || null,
-        asking_price: form.asking_price ? Number(form.asking_price) : null,
-        reason_for_selling: form.reason_for_selling.trim() || null,
+        asking_price: form.asking_price
+          ? Number(form.asking_price)
+          : null,
+        reason_for_selling:
+          form.reason_for_selling.trim() || null,
         description: form.description.trim() || null,
         photo_paths: photos,
-      })
-      .select("reference")
-      .single();
-    setBusy(false);
-    if (error) {
+
+        status: "new",
+        client_id: user?.uid ?? null,
+
+        created_at: serverTimestamp(),
+      });
+
+      setReference(submissionRef.id);
+      toast.success("Property submitted");
+    } catch (error) {
       console.error(error);
       toast.error("We couldn't send that. Please try again.");
-      return;
+    } finally {
+      setBusy(false);
     }
-    setReference(data.reference);
-    toast.success("Property submitted");
   }
 
   if (reference) {

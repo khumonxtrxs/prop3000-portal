@@ -1,0 +1,289 @@
+rules_version = '2';
+
+// Firestore rules for the Prop3000 Portal.
+//
+// These mirror the Supabase row-level-security policies in supabase/migrations/ one for one.
+// Roles live in user_roles/{uid} as { role: "admin" }, never on the profile, so a client
+// can never grant themselves a role by editing their own profile document.
+//
+// Rule of thumb: the browser talks straight to Firestore, so anything these rules allow is
+// public API. Test changes against the emulator before deploying.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------------------------------------------------------- helpers
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function uid() {
+      return request.auth.uid;
+    }
+
+    function userRole() {
+      return exists(/databases/$(database)/documents/user_roles/$(uid()))
+        ? get(/databases/$(database)/documents/user_roles/$(uid())).data.role
+        : null;
+    }
+
+    function hasRole(role) {
+      return signedIn() && userRole() == role;
+    }
+
+    // admin, owner, supervisor, agent
+    function isStaff() {
+      return hasRole('admin')
+        || hasRole('owner')
+        || hasRole('supervisor')
+        || hasRole('agent');
+    }
+
+    // admin, owner
+    function isOffice() {
+      return hasRole('admin') || hasRole('owner');
+    }
+
+    // admin, owner, agent
+    function isAgent() {
+      return hasRole('admin') || hasRole('owner') || hasRole('agent');
+    }
+
+    function owns(resourceData) {
+      return signedIn() && resourceData.client_id == uid();
+    }
+
+    // An anonymous submission carries no client_id; a signed-in one must carry the sender's own.
+    function submittedByAnyone() {
+      return !('client_id' in request.resource.data)
+        || request.resource.data.client_id == null
+        || (signedIn() && request.resource.data.client_id == uid());
+    }
+
+    function statusIn(allowed) {
+      return request.resource.data.status in allowed;
+    }
+
+    // ---------------------------------------------------------------- profiles
+
+    match /profiles/{userId} {
+      allow read: if signedIn() && (userId == uid() || isStaff());
+      allow create, update: if signedIn() && userId == uid();
+      allow delete: if false;
+    }
+
+    // Roles are readable by their owner and by the office, and are only ever written by the
+    // seeding script through the Admin SDK, which bypasses these rules.
+    match /user_roles/{userId} {
+      allow read: if signedIn() && (userId == uid() || isOffice());
+      allow write: if false;
+    }
+
+    match /service_types/{docId} {
+      allow read: if true;
+      allow write: if isOffice();
+    }
+
+    // ------------------------------------------------------- public submissions
+
+    match /service_requests/{docId} {
+      allow create: if submittedByAnyone()
+        && statusIn(['new'])
+        && request.resource.data.description is string;
+
+      allow read: if signedIn() && (owns(resource.data) || isStaff());
+
+      allow update: if isOffice()
+        && statusIn(['new', 'contacted', 'quoted', 'approved', 'converted', 'declined']);
+
+      allow delete: if isOffice();
+    }
+
+    match /property_submissions/{docId} {
+      allow create: if submittedByAnyone()
+        && statusIn(['new']);
+
+      allow read: if signedIn() && (owns(resource.data) || isStaff());
+
+      allow update: if isOffice()
+        && statusIn([
+          'new',
+          'reviewing',
+          'viewing_booked',
+          'offer_made',
+          'accepted',
+          'declined',
+          'purchased'
+        ]);
+
+      allow delete: if isOffice();
+    }
+
+    match /bookings/{docId} {
+      allow create: if submittedByAnyone()
+        && statusIn(['requested']);
+
+      allow read: if signedIn()
+        && (
+          owns(resource.data)
+          || resource.data.assigned_to == uid()
+          || isStaff()
+        );
+
+      allow update: if signedIn()
+        && (isOffice() || resource.data.assigned_to == uid())
+        && statusIn(['requested', 'confirmed', 'completed', 'cancelled']);
+
+      allow delete: if isOffice();
+    }
+
+    // ------------------------------------------------------------------- jobs
+
+    match /jobs/{jobId} {
+
+      function jobDoc() {
+        return get(/databases/$(database)/documents/jobs/$(jobId)).data;
+      }
+
+      function onThisJob() {
+        return signedIn() && (
+          jobDoc().client_id == uid()
+          || jobDoc().supervisor_id == uid()
+          || isOffice()
+        );
+      }
+
+      allow read: if signedIn() && (
+        owns(resource.data)
+        || resource.data.supervisor_id == uid()
+        || isOffice()
+      );
+
+      allow create: if isOffice()
+        && statusIn(['quoted', 'approved']);
+
+      allow update: if signedIn()
+        && (isOffice() || resource.data.supervisor_id == uid())
+        && statusIn([
+          'quoted',
+          'approved',
+          'in_progress',
+          'on_hold',
+          'complete',
+          'cancelled'
+        ])
+        && request.resource.data.progress >= 0
+        && request.resource.data.progress <= 100;
+
+      allow delete: if isOffice();
+
+      // Append-only audit trail: the writer must stamp their own uid, and history is never edited.
+      match /status_history/{entryId} {
+        allow read: if onThisJob();
+
+        allow create: if signedIn()
+          && request.resource.data.changed_by == uid()
+          && (isOffice() || jobDoc().supervisor_id == uid());
+
+        allow update, delete: if false;
+      }
+
+      match /photos/{photoId} {
+        allow read: if onThisJob();
+
+        allow create: if signedIn()
+          && request.resource.data.uploaded_by == uid()
+          && (isOffice() || jobDoc().supervisor_id == uid());
+
+        allow update: if false;
+
+        allow delete: if signedIn()
+          && (isOffice() || resource.data.uploaded_by == uid());
+      }
+    }
+
+    match /quotes/{quoteId} {
+      allow read: if signedIn()
+        && (owns(resource.data) || isStaff());
+
+      allow create: if isOffice()
+        && statusIn(['draft', 'quoted']);
+
+      // A client may only accept or decline; everything else is the office's.
+      allow update: if signedIn() && (
+        isOffice()
+        || (owns(resource.data) && statusIn(['approved', 'declined']))
+      );
+
+      allow delete: if isOffice();
+    }
+
+    // --------------------------------------------------------------- listings
+
+    match /listings/{listingId} {
+      allow read: if resource.data.status != 'draft'
+        || isAgent();
+
+      allow create, update: if isAgent()
+        && statusIn(['draft', 'published', 'under_offer', 'sold']);
+
+      allow delete: if isOffice();
+    }
+
+    match /offers/{offerId} {
+
+      function offerDoc() {
+        return get(/databases/$(database)/documents/offers/$(offerId)).data;
+      }
+
+      allow read: if signedIn()
+        && (owns(resource.data) || isAgent());
+
+      allow create: if signedIn()
+        && request.resource.data.client_id == uid()
+        && statusIn(['pending'])
+        && request.resource.data.amount is number
+        && request.resource.data.amount > 0;
+
+      allow update: if signedIn()
+        && (owns(resource.data) || isAgent())
+        && statusIn(['pending', 'approved', 'declined', 'countered']);
+
+      allow delete: if false;
+
+      match /events/{eventId} {
+        allow read: if signedIn()
+          && (offerDoc().client_id == uid() || isAgent());
+
+        allow create: if signedIn()
+          && request.resource.data.actor_id == uid()
+          && (offerDoc().client_id == uid() || isAgent());
+
+        allow update, delete: if false;
+      }
+    }
+
+    // ---------------------------------------------------------- notifications
+
+    // Anyone signed in may notify a counterparty, but only the recipient can read their feed
+    // or mark it read. The notification's body is written once and never edited.
+    match /notifications/{notificationId} {
+      allow read: if signedIn()
+        && resource.data.user_id == uid();
+
+      allow create: if signedIn();
+
+      allow update: if signedIn()
+        && resource.data.user_id == uid()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+
+      allow delete: if false;
+    }
+
+    // Anything not matched above is denied.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

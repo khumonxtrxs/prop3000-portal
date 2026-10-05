@@ -79,7 +79,38 @@ export function prettyStatus(value: string) {
   return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-export function shortDate(value: string | null | undefined) {
+type DateLike =
+  | string
+  | Date
+  | {
+    toDate?: () => Date;
+    toMillis?: () => number;
+  };
+
+export function shortDate(value: DateLike | null | undefined) {
   if (!value) return "—";
-  return new Date(value).toLocaleDateString("en-ZA", { day: "2-digit", month: "short", year: "numeric" });
+
+  let date: Date;
+
+  if (value instanceof Date) {
+    date = value;
+  } else if (typeof value === "string") {
+    date = new Date(value);
+  } else if (typeof value.toDate === "function") {
+    date = value.toDate();
+  } else if (typeof value.toMillis === "function") {
+    date = new Date(value.toMillis());
+  } else {
+    return "—";
+  }
+
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+
+  return date.toLocaleDateString("en-ZA", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 }

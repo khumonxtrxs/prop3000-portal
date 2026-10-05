@@ -12,7 +12,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  collection,
+  doc,
+  serverTimestamp,
+  setDoc,
+} from "firebase/firestore";
+
+import { firestore } from "@/integrations/firebase/client";
+import { COLLECTIONS } from "@/integrations/firebase/config";
+
 import { BUDGET_RANGES } from "@/lib/prop3000";
 
 export const Route = createFileRoute("/request")({
@@ -96,8 +105,45 @@ function RequestPage() {
     },
   });
 
+  async function onSubmit(values: RequestValues) {
+    const ref = newReference();
+
+    try {
+      const requestRef = doc(
+        collection(firestore(), COLLECTIONS.serviceRequests),
+      );
+
+      await setDoc(requestRef, {
+        reference: ref,
+
+        client_id: user?.uid ?? null,
+        full_name: values.full_name.trim(),
+        phone: values.phone.trim(),
+        email: values.email.trim(),
+        address: values.address.trim(),
+        description: values.description.trim(),
+
+        budget_range: values.budget_range || null,
+        service_types: values.service_types,
+        photo_paths: values.photos,
+
+        status: "new",
+        created_at: serverTimestamp(),
+      });
+
+      setReference(ref);
+      toast.success("Request received");
+    } catch (error) {
+      console.error(error);
+      toast.error(
+        "We couldn't send that. Please try again, or WhatsApp us.",
+      );
+    }
+  }
+
   const selected = watch("service_types");
   const photos = watch("photos");
+
 
   function toggleTrade(value: string) {
     setValue(
@@ -105,27 +151,6 @@ function RequestPage() {
       selected.includes(value) ? selected.filter((t) => t !== value) : [...selected, value],
       { shouldDirty: true },
     );
-  }
-
-  async function onSubmit(values: RequestValues) {
-    const ref = newReference();
-    const { error } = await supabase.from("service_requests").insert({
-      reference: ref,
-      client_id: user?.id ?? null,
-      full_name: values.full_name,
-      phone: values.phone,
-      email: values.email,
-      address: values.address,
-      description: values.description,
-      budget_range: values.budget_range || null,
-      service_types: values.service_types,
-      photo_paths: values.photos,
-    });
-    if (error) {
-      toast.error("We couldn't send that. Please try again, or WhatsApp us.");
-      return;
-    }
-    setReference(ref);
   }
 
   const describedBy = (field: keyof RequestValues) => (errors[field] ? `${field}-error` : undefined);
@@ -208,11 +233,10 @@ function RequestPage() {
                       type="button"
                       aria-pressed={active}
                       onClick={() => toggleTrade(trade.value)}
-                      className={`font-display rounded-sm border px-4 py-2.5 text-lg font-bold uppercase transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                        active
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-border bg-card text-foreground hover:border-primary"
-                      }`}
+                      className={`font-display rounded-sm border px-4 py-2.5 text-lg font-bold uppercase transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${active
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-card text-foreground hover:border-primary"
+                        }`}
                     >
                       {trade.label}
                     </button>
@@ -273,9 +297,15 @@ function RequestPage() {
                 className="font-display font-bold uppercase tracking-wide"
                 disabled={isSubmitting}
               >
-                {isSubmitting && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
+                {isSubmitting && (
+                  <Loader2
+                    className="size-4 animate-spin"
+                    aria-hidden="true"
+                  />
+                )}
                 Send my request
               </Button>
+
               <Reassurance />
             </div>
           </form>

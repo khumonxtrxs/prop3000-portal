@@ -11,7 +11,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+
+import {
+  collection,
+  doc,
+  serverTimestamp,
+  setDoc,
+} from "firebase/firestore";
+
+import { firestore } from "@/integrations/firebase/client";
+import { COLLECTIONS } from "@/integrations/firebase/config";
 import { getPublicListing } from "@/lib/listings.functions";
 import { money, prettyStatus, whatsappLink } from "@/lib/prop3000";
 
@@ -33,9 +43,8 @@ export const Route = createFileRoute("/listings/$id")({
       { title: `${loaderData?.title ?? "Property"} — Prop3000 Investments` },
       {
         name: "description",
-        content: `${loaderData?.title ?? "Distressed property"} in ${loaderData?.suburb ?? "Cape Town"} — asking ${
-          loaderData ? money(Number(loaderData.price)) : "POA"
-        }. Submit an offer online with Prop3000 Investments.`,
+        content: `${loaderData?.title ?? "Distressed property"} in ${loaderData?.suburb ?? "Cape Town"} — asking ${loaderData ? money(Number(loaderData.price)) : "POA"
+          }. Submit an offer online with Prop3000 Investments.`,
       },
       { property: "og:title", content: `${loaderData?.title ?? "Property"} — Prop3000 Investments` },
       { property: "og:description", content: loaderData?.description ?? "Distressed property for sale, as-is." },
@@ -65,7 +74,7 @@ function ListingDetail() {
   const { id } = Route.useParams();
   const { offer: suggested } = Route.useSearch();
   const { data: listing } = useSuspenseQuery(listingQuery(id));
-  const { session, user } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const asking = Number(listing?.price ?? 0);
   const [amount, setAmount] = useState(String(suggested ?? Math.round(asking * 0.92)));
@@ -102,35 +111,79 @@ function ListingDetail() {
 
   async function submitOffer(event: React.FormEvent) {
     event.preventDefault();
+
+    if (!user) {
+      toast.error("Sign in to submit an offer.");
+      return;
+    }
+
+    if (!listing) {
+      toast.error("This listing is no longer available.");
+      return;
+    }
+
     const value = Number(amount.replace(/\D/g, ""));
+
     if (!value || value < 1000) {
       setAmountError("Enter your offer amount in rands, e.g. 820000.");
       return;
     }
+
     setAmountError(null);
     setBusy(true);
-    const { data, error } = await supabase
-      .from("offers")
-      .insert({
-        listing_id: listing!.id,
-        client_id: user!.id,
-        client_name: (user!.user_metadata?.["full_name"] as string) || user!.email || "Client",
-        client_email: user!.email ?? "",
+
+    try {
+      const offerRef = doc(
+        collection(firestore(), COLLECTIONS.offers),
+      );
+
+      await setDoc(offerRef, {
+        reference: offerRef.id,
+
+        listing_id: listing.id,
+        listing_title: listing.title,
+        listing_address: listing.address,
+        asking_price: Number(listing.price),
+
+        client_id: user.uid,
+        buyer_name:
+          user.displayName ||
+          user.email ||
+          "Client",
+        client_email: user.email ?? "",
         client_phone: phone.trim() || null,
+
         amount: value,
         message: message.trim() || null,
-      })
-      .select("id, reference")
-      .single();
-    if (error) {
+
+        status: "pending",
+        counter_amount: null,
+        agent_notes: null,
+
+        agent_name: listing.agent_name ?? null,
+
+        created_at: serverTimestamp(),
+      });
+
+      setSent({
+        reference: offerRef.id,
+        amount: value,
+      });
+
+      toast.success(
+        "Offer submitted — the agent has been notified.",
+      );
+    } catch (error) {
+      console.error(error);
+
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not submit offer.",
+      );
+    } finally {
       setBusy(false);
-      setAmountError(error.message);
-      return;
     }
-    // Start the audit trail; the offers_notify trigger handles the notification.
-    await supabase.from("offer_events").insert({ offer_id: data.id, status: "submitted", amount: value, actor_id: user!.id });
-    setBusy(false);
-    setSent({ reference: data.reference, amount: value });
   }
 
   return (
@@ -224,15 +277,23 @@ function ListingDetail() {
                 </div>
               ) : (
                 <>
-                  <h2 id="offer-heading" className="text-display text-3xl uppercase text-foreground">
+                  <h2
+                    id="offer-heading"
+                    className="text-display text-3xl uppercase text-foreground"
+                  >
                     Make an offer
                   </h2>
-                  {session ? (
+
+                  {user ? (
                     <form onSubmit={submitOffer} noValidate className="mt-4 space-y-4">
                       <div>
-                        <label htmlFor="o_amount" className="text-label mb-2 block text-[12px] text-ink-subtle">
+                        <label
+                          htmlFor="o_amount"
+                          className="text-label mb-2 block text-[12px] text-ink-subtle"
+                        >
                           Your offer (R)
                         </label>
+
                         <Input
                           id="o_amount"
                           inputMode="numeric"
@@ -242,16 +303,26 @@ function ListingDetail() {
                           aria-describedby={amountError ? "o_amount-error" : undefined}
                           onChange={(e) => setAmount(e.target.value)}
                         />
+
                         {amountError && (
-                          <p id="o_amount-error" role="alert" className="mt-1.5 text-sm font-semibold text-brick">
+                          <p
+                            id="o_amount-error"
+                            role="alert"
+                            className="mt-1.5 text-sm font-semibold text-brick"
+                          >
                             Error: {amountError}
                           </p>
                         )}
                       </div>
+
                       <div>
-                        <label htmlFor="o_phone" className="text-label mb-2 block text-[12px] text-ink-subtle">
+                        <label
+                          htmlFor="o_phone"
+                          className="text-label mb-2 block text-[12px] text-ink-subtle"
+                        >
                           Contact number
                         </label>
+
                         <Input
                           id="o_phone"
                           type="tel"
@@ -262,10 +333,15 @@ function ListingDetail() {
                           onChange={(e) => setPhone(e.target.value)}
                         />
                       </div>
+
                       <div>
-                        <label htmlFor="o_msg" className="text-label mb-2 block text-[12px] text-ink-subtle">
+                        <label
+                          htmlFor="o_msg"
+                          className="text-label mb-2 block text-[12px] text-ink-subtle"
+                        >
                           Message to the agent
                         </label>
+
                         <Textarea
                           id="o_msg"
                           rows={3}
@@ -276,6 +352,7 @@ function ListingDetail() {
                           placeholder="Cash, no bond needed. Available to view this week."
                         />
                       </div>
+
                       <Button
                         type="submit"
                         variant="brick"
@@ -283,19 +360,27 @@ function ListingDetail() {
                         className="font-display w-full font-bold uppercase tracking-wide"
                         disabled={busy}
                       >
-                        {busy && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
+                        {busy && (
+                          <Loader2
+                            className="size-4 animate-spin"
+                            aria-hidden="true"
+                          />
+                        )}
                         Submit offer
                       </Button>
+
                       <p className="text-sm text-muted-foreground">
-                        No payment or transfer happens here. An approved offer puts you in touch with the agent.
+                        No payment or transfer happens here. An approved offer puts you in
+                        touch with the agent.
                       </p>
                     </form>
                   ) : (
                     <div className="mt-4 space-y-3">
                       <p className="text-muted-foreground">
-                        Sign in to submit and track an offer. Your role decides where you land, and you can follow the
-                        status without phoning in.
+                        Sign in to submit and track an offer. Your role decides where you
+                        land, and you can follow the status without phoning in.
                       </p>
+
                       <Button
                         variant="default"
                         size="lg"

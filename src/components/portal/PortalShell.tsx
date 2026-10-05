@@ -2,9 +2,15 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
 import { portalLinks, primaryRole } from "@/lib/portal";
 import { shortDate } from "@/lib/prop3000";
+import { collection, getDocs, query, where } from "firebase/firestore";
+import { COLLECTIONS } from "@/integrations/firebase/config";
+import {
+  getAuth,
+  signOut as firebaseSignOut,
+} from "firebase/auth";
+import { firestore } from "@/integrations/firebase/client";
 
 export function PortalShell({
   title,
@@ -22,11 +28,11 @@ export function PortalShell({
   const queryClient = useQueryClient();
   const links = portalLinks(roles);
   const role = roles.length > 0 ? primaryRole(roles) : null;
-  const rawName = user?.user_metadata?.["full_name"];
+  const rawName = user?.displayName;
   const fullName = typeof rawName === "string" ? rawName.trim() : "";
 
   async function signOut() {
-    await supabase.auth.signOut();
+    await firebaseSignOut(getAuth());
     queryClient.clear();
     void navigate({ to: "/auth" });
   }
@@ -54,7 +60,7 @@ export function PortalShell({
             </p>
           )}
           <div className="ml-auto flex items-center gap-2">
-            <AlertsMenu userId={user?.id} />
+            <AlertsMenu userId={user?.uid} />
             <button
               type="button"
               onClick={() => void signOut()}
@@ -104,13 +110,15 @@ function AlertsMenu({ userId }: { userId: string | undefined }) {
     queryKey: ["notifications", userId, "unread"],
     enabled: !!userId,
     queryFn: async () => {
-      const { count, error } = await supabase
-        .from("notifications")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", userId!)
-        .eq("read", false);
-      if (error) throw error;
-      return count ?? 0;
+      const snapshot = await getDocs(
+        query(
+          collection(firestore(), COLLECTIONS.notifications),
+          where("user_id", "==", userId!),
+          where("read", "==", false),
+        ),
+      );
+
+      return snapshot.size;
     },
   });
 
@@ -118,14 +126,30 @@ function AlertsMenu({ userId }: { userId: string | undefined }) {
     queryKey: ["notifications", userId, "list"],
     enabled: !!userId && open,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("notifications")
-        .select("id, title, body, read, created_at")
-        .eq("user_id", userId!)
-        .order("created_at", { ascending: false })
-        .limit(20);
-      if (error) throw error;
-      return data ?? [];
+      const snapshot = await getDocs(
+        query(
+          collection(firestore(), COLLECTIONS.notifications),
+          where("user_id", "==", userId!),
+        ),
+      );
+
+      const rows = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...(doc.data() as {
+          title?: string;
+          body?: string;
+          read?: boolean;
+          created_at?: unknown;
+        }),
+      }));
+
+      rows.sort(
+        (a, b) =>
+          new Date(String(b.created_at ?? "")).getTime() -
+          new Date(String(a.created_at ?? "")).getTime(),
+      );
+
+      return rows.slice(0, 20);
     },
   });
 
@@ -197,7 +221,17 @@ function AlertsMenu({ userId }: { userId: string | undefined }) {
                       {!item.read && <span className="sr-only"> (unread)</span>}
                     </p>
                     {item.body && <p className="text-sm text-muted-foreground">{item.body}</p>}
-                    <p className="mt-1 text-xs text-muted-foreground">{shortDate(item.created_at)} · Email + in-app</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{shortDate(
+                      typeof item.created_at === "object" &&
+                        item.created_at !== null &&
+                        "toDate" in item.created_at &&
+                        typeof (item.created_at as { toDate?: unknown }).toDate === "function"
+                        ? (item.created_at as { toDate: () => Date }).toDate()
+                        : typeof item.created_at === "string"
+                          ? item.created_at
+                          : undefined,
+                    )}{" "}
+                      · Email + in-app</p>
                   </div>
                 </li>
               ))}

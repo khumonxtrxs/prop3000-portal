@@ -1,0 +1,46 @@
+name: Firebase rules
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - firestore.rules
+      - storage.rules
+      - firestore.indexes.json
+
+  workflow_dispatch:
+
+jobs:
+  deploy-staging-rules:
+    name: Deploy staging Firebase rules
+    runs-on: ubuntu-latest
+    environment: staging
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Write Firebase service account
+        run: printf '%s' "$SA_JSON" > "$RUNNER_TEMP/sa.json"
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+      - name: Deploy Firebase rules
+        run: >
+          npx firebase deploy
+          --only firestore:rules,storage:rules
+          --project "$FIREBASE_PROJECT"
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
+          FIREBASE_PROJECT: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          
